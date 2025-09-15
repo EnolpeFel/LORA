@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Dimensions, 
-  ScrollView, 
-  StyleSheet, 
-  Text, 
-  TouchableOpacity, 
+import {
+  Dimensions,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
   View,
   Modal,
   TextInput,
@@ -35,17 +35,17 @@ const PayNowScreen = ({ navigation, route }) => {
     } else {
       // Fallback to static data if no loan application provided
       setLoanDetails({
-        applicationId: 'L-TWCXAA28',
-        amount: 'P1,000',
-        term: '2 months',
-        lender: 'OCS Lending Incorporated',
-        status: 'Processing',
-        totalUsedCreditLimit: 507.00,
-        unpaidCharges: 507.00,
-        interestDue: 21.13,
+        applicationId: '-----',
+        amount: 'P0.00',
+        term: '0 months',
+        lender: '------',
+        status: '-----',
+        totalUsedCreditLimit: 0.00,
+        unpaidCharges: 0.00,
+        interestDue: 0.00,
         penalties: 0.00,
-        totalAmountDue: 528.13,
-        dueDate: 'January 12, 2021',
+        totalAmountDue: 0.00,
+        dueDate: '---',
         isProcessing: false
       });
     }
@@ -54,7 +54,7 @@ const PayNowScreen = ({ navigation, route }) => {
   // Function to calculate billing details from loan application
   const calculateBillingDetails = (application) => {
     const isProcessingStatus = application.status === 'Processing' || application.status === 'Pending';
-    
+
     // If loan is still processing, show minimal information
     if (isProcessingStatus) {
       return {
@@ -75,81 +75,18 @@ const PayNowScreen = ({ navigation, route }) => {
         isProcessing: true,
         applicationDate: application.date || new Date().toLocaleDateString(),
         // Receipt specific fields
-        loanAmount: 0,
-        interestRate: 0,
-        interestType: 'TBD',
-        totalInterest: 0,
-        processingFee: 0,
-        monthlyPayment: 0,
-        totalPayment: 0,
-        netRelease: 0
+        loanAmount: application.loanAmount || 0,
+        interestRate: application.interestRate || 0,
+        interestType: application.interestType || 'TBD',
+        totalInterest: application.totalInterest || 0,
+        processingFee: application.processingFee || 0,
+        monthlyPayment: parseFloat(application.monthlyPayment?.replace('\u20b1', '').replace(',', '')) || 0,
+        totalPayment: application.totalPayment || 0,
+        netRelease: application.netRelease || 0
       };
     }
-    
-    // Extract data from the application for approved/active loans
-    const loanAmount = parseFloat(application.amount.replace(/[^\d.,]/g, '').replace(',', ''));
-    const term = parseInt(application.terms.split(' ')[0]);
-    
-    // Calculate interest based on lender's interest type and loan application screen logic
-    let interestDue = 0;
-    let totalAmountDue = 0;
-    let monthlyPayment = 0;
-    let netRelease = 0;
-    let interestRate = 0;
-    let interestType = 'Straight';
-    let processingFee = 0;
-    let totalInterest = 0;
-    
-    if (application.lender.includes('OCS')) {
-      // OCS uses straight interest - 7.5% with processing fee
-      interestRate = 7.5;
-      processingFee = 750;
-      interestDue = loanAmount * 0.075;
-      totalInterest = interestDue;
-      totalAmountDue = loanAmount + interestDue;
-      monthlyPayment = totalAmountDue / term;
-      netRelease = loanAmount - 750; // OCS processing fee
-      interestType = 'Straight';
-    } else if (application.lender.includes('PNJ')) {
-      // PNJ uses straight interest - 10%
-      interestRate = 10;
-      processingFee = 0;
-      interestDue = loanAmount * 0.10;
-      totalInterest = interestDue;
-      totalAmountDue = loanAmount + interestDue;
-      monthlyPayment = totalAmountDue / term;
-      netRelease = loanAmount; // No processing fee
-      interestType = 'Straight';
-    } else if (application.lender.includes('San Hec Bro')) {
-      // San Hec Bro uses diminishing interest - 5% per term
-      interestRate = 5;
-      processingFee = 500;
-      interestType = 'Diminishing';
-      
-      let remainingPrincipal = loanAmount;
-      totalInterest = 0;
-      
-      for (let i = 0; i < term; i++) {
-        const termInterest = remainingPrincipal * 0.05;
-        totalInterest += termInterest;
-        remainingPrincipal -= loanAmount / term;
-      }
-      
-      interestDue = totalInterest;
-      totalAmountDue = loanAmount + totalInterest;
-      monthlyPayment = totalAmountDue / term;
-      netRelease = loanAmount - 500; // San Hec Bro processing fee
-    }
-    
-    // Generate a due date (30 days from application date or current date)
-    const dueDate = new Date();
-    dueDate.setDate(dueDate.getDate() + 30);
-    const formattedDueDate = dueDate.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    });
-    
+
+    // For approved loans, use the provided data
     return {
       applicationId: application.id,
       amount: application.amount,
@@ -159,23 +96,23 @@ const PayNowScreen = ({ navigation, route }) => {
       loanType: application.type || 'New Loan',
       monthlyIncome: application.monthlyIncome || 'N/A',
       collateral: application.collateral || 'N/A',
-      totalUsedCreditLimit: loanAmount,
-      unpaidCharges: loanAmount,
-      interestDue: interestDue,
+      totalUsedCreditLimit: application.loanAmount,
+      unpaidCharges: application.loanAmount,
+      interestDue: application.totalInterest,
       penalties: 0.00,
-      totalAmountDue: totalAmountDue,
-      monthlyPayment: monthlyPayment,
-      netRelease: netRelease,
-      dueDate: formattedDueDate,
+      totalAmountDue: application.totalPayment,
+      monthlyPayment: parseFloat(application.monthlyPayment?.replace('\u20b1', '').replace(',', '')),
+      netRelease: application.netRelease,
+      dueDate: application.dueDate || new Date().toLocaleDateString(),
       isProcessing: false,
       applicationDate: application.date || new Date().toLocaleDateString(),
       // Receipt specific fields
-      loanAmount: loanAmount,
-      interestRate: interestRate,
-      interestType: interestType,
-      totalInterest: totalInterest,
-      processingFee: processingFee,
-      totalPayment: totalAmountDue
+      loanAmount: application.loanAmount,
+      interestRate: application.interestRate,
+      interestType: application.interestType,
+      totalInterest: application.totalInterest,
+      processingFee: application.processingFee,
+      totalPayment: application.totalPayment
     };
   };
 
@@ -231,16 +168,16 @@ const PayNowScreen = ({ navigation, route }) => {
 
   const processPayment = () => {
     setIsProcessing(true);
-    
+
     setTimeout(() => {
       setIsProcessing(false);
       setShowPaymentModal(false);
-      
+
       // If paying with wallet, deduct from balance
       if (selectedPaymentMethod.id === 'wallet') {
         setWalletBalance(prev => prev - loanDetails.totalAmountDue);
       }
-      
+
       setShowConfirmationModal(true);
     }, 2000);
   };
@@ -250,12 +187,17 @@ const PayNowScreen = ({ navigation, route }) => {
     navigation.navigate('Dashboard');
   };
 
+  // Function to navigate to Dashboard
+  const goToDashboard = () => {
+    navigation.navigate('Dashboard');
+  };
+
   // Show loading while processing loan application data
   if (!loanDetails) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
+          <TouchableOpacity onPress={goToDashboard}>
             <MaterialIcons name="arrow-back" size={24} color="white" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Pay for Loan</Text>
@@ -275,7 +217,7 @@ const PayNowScreen = ({ navigation, route }) => {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header matching the GCredit style */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={goToDashboard}>
           <MaterialIcons name="arrow-back" size={24} color="white" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Pay for Loan</Text>
@@ -292,10 +234,10 @@ const PayNowScreen = ({ navigation, route }) => {
               <MaterialIcons name="receipt" size={24} color="#4F46E5" />
               <Text style={styles.receiptTitle}>Loan Receipt</Text>
               <View style={styles.statusBadge}>
-                <MaterialIcons 
-                  name={loanDetails.status === 'Approved' ? 'check-circle' : 'hourglass-empty'} 
-                  size={16} 
-                  color={loanDetails.status === 'Approved' ? '#10B981' : '#F59E0B'} 
+                <MaterialIcons
+                  name={loanDetails.status === 'Approved' ? 'check-circle' : 'hourglass-empty'}
+                  size={16}
+                  color={loanDetails.status === 'Approved' ? '#10B981' : '#F59E0B'}
                 />
                 <Text style={[
                   styles.statusText,
@@ -305,15 +247,15 @@ const PayNowScreen = ({ navigation, route }) => {
                 </Text>
               </View>
             </View>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.toggleButton}
               onPress={() => setShowReceiptDetails(!showReceiptDetails)}
             >
-              <MaterialIcons 
-                name={showReceiptDetails ? 'keyboard-arrow-up' : 'keyboard-arrow-down'} 
-                size={20} 
-                color="#6B7280" 
+              <MaterialIcons
+                name={showReceiptDetails ? 'keyboard-arrow-up' : 'keyboard-arrow-down'}
+                size={20}
+                color="#6B7280"
               />
             </TouchableOpacity>
           </View>
@@ -321,9 +263,9 @@ const PayNowScreen = ({ navigation, route }) => {
           <View style={styles.receiptSummary}>
             <Text style={styles.receiptNumber}>Receipt #{loanDetails.applicationId}</Text>
             <Text style={styles.receiptDate}>
-              Generated on {new Date().toLocaleDateString('en-US', { 
-                year: 'numeric', 
-                month: 'long', 
+              Generated on {new Date().toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'long',
                 day: 'numeric',
                 hour: '2-digit',
                 minute: '2-digit'
@@ -334,7 +276,7 @@ const PayNowScreen = ({ navigation, route }) => {
           {showReceiptDetails && (
             <View style={styles.receiptDetails}>
               <View style={styles.receiptDivider} />
-              
+
               {/* Loan Application Details */}
               <View style={styles.receiptSection}>
                 <Text style={styles.receiptSectionTitle}>Loan Application Details</Text>
@@ -383,7 +325,7 @@ const PayNowScreen = ({ navigation, route }) => {
                 <View style={styles.receiptDetailRow}>
                   <Text style={styles.receiptDetailLabel}>Principal Amount:</Text>
                   <Text style={styles.receiptDetailValueAmount}>
-                    {loanDetails.isProcessing ? '--' : `₱${loanDetails.loanAmount.toLocaleString()}`}
+                    {loanDetails.isProcessing ? '--' : `\u20b1${loanDetails.loanAmount.toLocaleString()}`}
                   </Text>
                 </View>
                 <View style={styles.receiptDetailRow}>
@@ -396,15 +338,15 @@ const PayNowScreen = ({ navigation, route }) => {
                   <>
                     <View style={styles.receiptDetailRow}>
                       <Text style={styles.receiptDetailLabel}>Total Interest:</Text>
-                      <Text style={styles.receiptDetailValueAmount}>₱{loanDetails.totalInterest.toFixed(2)}</Text>
+                      <Text style={styles.receiptDetailValueAmount}>\u20b1{loanDetails.totalInterest.toFixed(2)}</Text>
                     </View>
                     <View style={styles.receiptDetailRow}>
                       <Text style={styles.receiptDetailLabel}>Processing Fee:</Text>
-                      <Text style={styles.receiptDetailValueAmount}>₱{loanDetails.processingFee.toFixed(2)}</Text>
+                      <Text style={styles.receiptDetailValueAmount}>\u20b1{loanDetails.processingFee.toFixed(2)}</Text>
                     </View>
                     <View style={styles.receiptHighlightRow}>
                       <Text style={styles.receiptHighlightLabel}>Net Amount to Receive:</Text>
-                      <Text style={styles.receiptNetReleaseValue}>₱{loanDetails.netRelease.toFixed(2)}</Text>
+                      <Text style={styles.receiptNetReleaseValue}>\u20b1{loanDetails.netRelease.toFixed(2)}</Text>
                     </View>
                   </>
                 )}
@@ -413,7 +355,7 @@ const PayNowScreen = ({ navigation, route }) => {
               {!loanDetails.isProcessing && (
                 <>
                   <View style={styles.receiptDivider} />
-                  
+
                   {/* Payment Information */}
                   <View style={styles.receiptSection}>
                     <Text style={styles.receiptSectionTitle}>Payment Information</Text>
@@ -437,7 +379,7 @@ const PayNowScreen = ({ navigation, route }) => {
           <View style={styles.totalAmountContainer}>
             <Text style={styles.currencyLabel}>PHP</Text>
             <Text style={[
-              styles.totalAmount, 
+              styles.totalAmount,
               loanDetails.isProcessing && styles.processingAmount
             ]}>
               {loanDetails.isProcessing ? '---.--' : loanDetails.totalAmountDue.toFixed(2)}
@@ -586,7 +528,7 @@ const PayNowScreen = ({ navigation, route }) => {
           </View>
 
           <Text style={styles.disclaimer}>
-            {loanDetails.isProcessing 
+            {loanDetails.isProcessing
               ? '*Billing details will be available once your loan is approved'
               : '*Any interest incurred will reflect on your billing date'
             }
@@ -594,11 +536,11 @@ const PayNowScreen = ({ navigation, route }) => {
         </View>
 
         {/* Payment Button */}
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[
-            styles.payButton, 
+            styles.payButton,
             loanDetails.isProcessing && styles.disabledButton
-          ]} 
+          ]}
           onPress={() => loanDetails.isProcessing ? handlePaymentMethodSelect({}) : setShowPaymentModal(true)}
           disabled={loanDetails.isProcessing}
         >
@@ -646,7 +588,7 @@ const PayNowScreen = ({ navigation, route }) => {
                     <MaterialIcons name="close" size={24} color="#374151" />
                   </TouchableOpacity>
                 </View>
-                
+
                 <View style={styles.amountSummary}>
                   <Text style={styles.amountSummaryLabel}>Amount to Pay</Text>
                   <Text style={styles.amountSummaryValue}>
@@ -656,7 +598,7 @@ const PayNowScreen = ({ navigation, route }) => {
 
                 <View style={styles.paymentMethodsList}>
                   {paymentMethods.map((method) => (
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       key={method.id}
                       style={[
                         styles.paymentMethodCard,
@@ -669,10 +611,10 @@ const PayNowScreen = ({ navigation, route }) => {
                       disabled={method.id === 'wallet' && !method.available}
                     >
                       <View style={styles.paymentMethodLeft}>
-                        <MaterialIcons 
-                          name={method.icon} 
-                          size={24} 
-                          color={method.id === 'wallet' && !method.available ? "#9CA3AF" : "#4F46E5"} 
+                        <MaterialIcons
+                          name={method.icon}
+                          size={24}
+                          color={method.id === 'wallet' && !method.available ? "#9CA3AF" : "#4F46E5"}
                         />
                         <View style={styles.paymentMethodInfo}>
                           <Text style={[
@@ -693,10 +635,10 @@ const PayNowScreen = ({ navigation, route }) => {
                           )}
                         </View>
                       </View>
-                      <MaterialIcons 
-                        name="chevron-right" 
-                        size={24} 
-                        color={method.id === 'wallet' && !method.available ? "#9CA3AF" : "#6B7280"} 
+                      <MaterialIcons
+                        name="chevron-right"
+                        size={24}
+                        color={method.id === 'wallet' && !method.available ? "#9CA3AF" : "#6B7280"}
                       />
                     </TouchableOpacity>
                   ))}
@@ -725,23 +667,23 @@ const PayNowScreen = ({ navigation, route }) => {
             <View style={styles.successIcon}>
               <MaterialIcons name="check" size={40} color="white" />
             </View>
-            
+
             <Text style={styles.successTitle}>Payment Successful</Text>
             <Text style={styles.successMessage}>
               Your payment has been processed successfully. Your loan balance has been updated.
             </Text>
-            
+
             <View style={styles.successDetails}>
               <Text style={styles.successDetailLabel}>Transaction ID:</Text>
               <Text style={styles.successDetailValue}>TXN-{Date.now()}</Text>
             </View>
-            
+
             <View style={styles.successDetails}>
               <Text style={styles.successDetailLabel}>Amount Paid:</Text>
               <Text style={styles.successDetailValue}>PHP {loanDetails.totalAmountDue.toFixed(2)}</Text>
             </View>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.successButton}
               onPress={goBackToDashboard}
             >
