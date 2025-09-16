@@ -373,7 +373,7 @@ const CreateAccountScreen = ({ navigation }) => {
               ) : (
                 <View style={styles.profilePlaceholder}>
                  <Image 
-                           source={require('../assets/LoraLogo.png')} 
+                           source={require('../assets/LoraLogo.png')}  
                            style={styles.logo}
                          />
                 </View>
