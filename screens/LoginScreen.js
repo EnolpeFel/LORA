@@ -49,7 +49,7 @@ const LoginScreen = ({ navigation }) => {
       <View style={styles.content}>
         {/* Logo */}
         <Image 
-          source={require('C:/Users/user/my-expo-app/assets/LoraLogo.png')} 
+          source={require('../assets/LoraLogo.png')}  
           style={styles.logo}
         />
         
