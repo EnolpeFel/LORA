@@ -26,7 +26,7 @@ const QRPayScreen = ({ navigation }) => {
           <>
             <View style={styles.qrContainer}>
               <Image 
-                source={require("C:/Users/user/my-expo-app/assets/qr-placeholder.png")} 
+                source={require("../assets/qr-placeholder.png")} 
                 style={styles.qrCode}
               />
               <Text style={styles.amountText}>₱{amount}</Text>
