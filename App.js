@@ -1,17 +1,17 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import WelcomeScreen from "C:/Users/user/my-expo-app/screens/WelcomeScreen.js";
-import LoginScreen from "C:/Users/user/my-expo-app/screens/LoginScreen.js";
-import CreateAccountScreen from "C:/Users/user/my-expo-app/screens/CreateAccountScreen.js";
-import DashboardScreen from "C:/Users/user/my-expo-app/screens/DashboardScreen.js";
-import LoanApplicationScreen from "C:/Users/user/my-expo-app/screens/LoanApplicationScreen.js";
-import LoansScreen from "C:/Users/user/my-expo-app/screens/LoansScreen.js";
-import MyLoanScreen from "C:/Users/user/my-expo-app/screens/MyLoanScreen.js";
-import TransactionsScreen from "C:/Users/user/my-expo-app/screens/TransactionScreen.js";
-import TransferScreen from "C:/Users/user/my-expo-app/screens/TransferScreen";
-import QRPayScreen from "C:/Users/user/my-expo-app/screens/QRPayScreen";
-import CashInScreen from "C:/Users/user/my-expo-app/screens/CashInScreen";
-import PayNowScreen from "C:/Users/user/my-expo-app/screens/PayNowScreen";
+import WelcomeScreen from "./screens/WelcomeScreen.js";
+import LoginScreen from "./screens/LoginScreen.js";
+import CreateAccountScreen from "./screens/CreateAccountScreen.js";
+import DashboardScreen from "./screens/DashboardScreen.js";
+import LoanApplicationScreen from "./screens/LoanApplicationScreen.js";
+import LoansScreen from "./screens/LoansScreen.js";
+import MyLoanScreen from "./screens/MyLoanScreen.js";
+import TransactionsScreen from "./screens/TransactionScreen.js";
+import TransferScreen from "./screens/TransferScreen";
+import QRPayScreen from "./screens/QRPayScreen";
+import CashInScreen from "./screens/CashInScreen";
+import PayNowScreen from "./screens/PayNowScreen";
 
 const Stack = createNativeStackNavigator();
 
