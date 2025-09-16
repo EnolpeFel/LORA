@@ -31,8 +31,6 @@ const LoginScreen = ({ navigation }) => {
       return;
     }
 
-    console.log(accountNumber.replace(" ", ""), pin);
-
     try {
       const { data } = await client.mutate({
         mutation: LOGIN_ACCOUNT,
