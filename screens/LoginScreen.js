@@ -8,11 +8,12 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import client from "../lib/apolloClient";
+import { LOGIN_ACCOUNT } from '../graphql/mutations/loginAccount';
 
 const LoginScreen = ({ navigation, route }) => {
   const [pin, setPin] = useState('');
   const [currentAccount, setCurrentAccount] = useState('+63949150024');
-  const correctPin = '1111';
 
   useEffect(() => {
     if (route.params?.newAccount) {
@@ -32,12 +33,38 @@ const LoginScreen = ({ navigation, route }) => {
     setPin(pin.slice(0, -1));
   };
 
-  const handleLogin = () => {
-    if (pin === correctPin) {
+  const handleLogin = async () => {
+    if (pin.length !== 4) {
+      Alert.alert('Error', 'Please enter a 4-digit PIN');
+      return;
+    }
+
+    try {
+      const { data } = await client.mutate({
+        mutation: LOGIN_ACCOUNT,
+        variables: { phone: currentAccount.replace(" ", ""), pinCode: pin },
+        fetchPolicy: 'no-cache'
+      });
+  
+      const { success, message } = data.loginAccount;
+  
+      // TO DO: Add loading and success message in UI
+      // This is a example
+      console.log(success, message);
+  
+      if (!success) {
+        Alert.alert('Error', message);
+        setPin('');
+        return;
+      };
+      
       navigation.navigate('Dashboard');
-    } else {
-      Alert.alert('Invalid MPIN', 'Please enter the correct 4-digit MPIN');
+
+    } catch (err) {
+      // TO DO: Add error message in UI
+      console.log(err);
       setPin('');
+      return;
     }
   };
 
