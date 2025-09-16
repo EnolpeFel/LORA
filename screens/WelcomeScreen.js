@@ -49,7 +49,7 @@ const WelcomeScreen = ({ navigation }) => {
           <Text style={styles.title}>Welcome to Lora App</Text>
           <View style={styles.logoContainer}>
             <Image 
-                     source={require('C:/Users/user/my-expo-app/assets/LoraLogo.png')} 
+                     source={require('../assets/LoraLogo.png')} 
                      style={styles.logo}
                    />
           </View>
