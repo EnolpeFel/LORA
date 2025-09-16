@@ -108,6 +108,10 @@ const CreateAccountScreen = ({ navigation }) => {
       // This is a example
       console.log(success, message); 
 
+      if (!success) {
+        return;
+      };
+
     } catch (err) {
       // TO DO: Add error message in UI
       console.log(err);
