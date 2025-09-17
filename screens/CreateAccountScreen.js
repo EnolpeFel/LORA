@@ -16,6 +16,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
+import { SEND_MPIN, VERIFY_MPIN } from "../graphql/queries/sendVerifyMpin";
+import client from "../lib/apolloClient";
 
 const { width, height } = Dimensions.get('window');
 
@@ -67,9 +69,6 @@ const CreateAccountScreen = ({ navigation }) => {
   const municipalityOptions = ['Cebu City', 'Others'];
   const barangayOptions = ['Mambaling', 'Duljo', 'Pasil', 'Others'];
 
-  // Static MPIN
-  const STATIC_MPIN = '123456';
-
   // Timer countdown
   React.useEffect(() => {
     let interval;
@@ -84,7 +83,7 @@ const CreateAccountScreen = ({ navigation }) => {
   }, [screen, timer]);
 
   // Screen handlers
-  const handleNext = () => {
+  const handleNext = async () => {
     if (!phoneNumber || phoneNumber.length < 13) { // +63 plus 10 digits
       Alert.alert('Error', 'Please enter a valid Philippine mobile number (+63XXXXXXXXXX)');
       return;
@@ -93,22 +92,71 @@ const CreateAccountScreen = ({ navigation }) => {
       Alert.alert('Error', 'Please agree to the terms');
       return;
     }
+
+    // Send MPIN
+    try {
+      const { data } = await client.query({
+        query: SEND_MPIN,
+        variables: { phone: phoneNumber },
+        fetchPolicy: 'no-cache'
+      })
+
+      const { success, message } = data.sendMPIN;
+
+      // TO DO: Add loading and success message in UI
+      // This is a example
+      console.log(success, message); 
+
+      if (!success) {
+        return;
+      };
+
+    } catch (err) {
+      // TO DO: Add error message in UI
+      console.log(err);
+      return;
+    }
+
     setScreen('verification');
     setTimer(300);
     setCanResend(false);
     Keyboard.dismiss();
   };
 
-  const handleVerify = () => {
+  const handleVerify = async () => {
     const enteredMpin = mpin.join('');
     if (enteredMpin.length !== 6) {
       Alert.alert('Error', 'Please enter 6-digit MPIN');
       return;
     }
-    if (enteredMpin !== STATIC_MPIN) {
-      Alert.alert('Error', 'Invalid MPIN. Please try again');
+
+    // Verify MPIN
+    try {
+      const { data } = await client.query({
+        query: VERIFY_MPIN,
+        variables: { phone: phoneNumber, code: enteredMpin },
+        fetchPolicy: 'no-cache'
+      });
+
+      const { success, message } = data.verifyMPIN;
+
+      // TO DO: Add loading and success message in UI
+      // This is a example
+      console.log(success, message);
+
+      if (!success) {
+        Alert.alert('Error', 'Invalid MPIN. Please try again');
+        setMpin(['', '', '', '', '', '']);
+        return;
+      };
+
+    } catch (err) {
+      // TO DO: Add error message in UI
+      console.log(err);
+      setMpin(['', '', '', '', '', '']);
       return;
-    }
+    };
+
     setScreen('details');
   };
 
