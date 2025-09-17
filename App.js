@@ -12,6 +12,7 @@ import TransferScreen from "./screens/TransferScreen";
 import QRPayScreen from "./screens/QRPayScreen";
 import CashInScreen from "./screens/CashInScreen";
 import PayNowScreen from "./screens/PayNowScreen";
+import ProfileScreen from "./screens/ProfileScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -37,6 +38,10 @@ export default function App() {
         <Stack.Screen 
           name="Dashboard" 
           component={DashboardScreen} 
+        />
+        <Stack.Screen 
+          name="Profile" 
+          component={ProfileScreen} 
         />
         <Stack.Screen 
           name="Loans" 
