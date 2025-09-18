@@ -5,6 +5,7 @@ const CREATE_ACCOUNT = gql`
     createAccount(data: $data) {
       success
       message
+      token
     }
   }
 `

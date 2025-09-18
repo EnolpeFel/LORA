@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import client from "../lib/apolloClient";
 import { LOGIN_ACCOUNT } from '../graphql/mutations/loginAccount';
+import { saveToken, getToken } from "../lib/cookies";
 
 const LoginScreen = ({ navigation, route }) => {
   const [pin, setPin] = useState('');
@@ -46,7 +47,7 @@ const LoginScreen = ({ navigation, route }) => {
         fetchPolicy: 'no-cache'
       });
   
-      const { success, message } = data.loginAccount;
+      const { success, message, token } = data.loginAccount;
   
       // TO DO: Add loading and success message in UI
       // This is a example
@@ -57,6 +58,10 @@ const LoginScreen = ({ navigation, route }) => {
         setPin('');
         return;
       };
+
+      // Save token if token does not exist
+      const isToken = await getToken();
+      !isToken && await saveToken(token); 
       
       navigation.navigate('Dashboard');
 

@@ -19,6 +19,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { SEND_MPIN, VERIFY_MPIN } from "../graphql/queries/sendVerifyMpin";
 import { CREATE_ACCOUNT } from '../graphql/mutations/createAccount';
 import client from "../lib/apolloClient";
+import { saveToken } from "../lib/cookies";
 
 const { width, height } = Dimensions.get('window');
 
@@ -298,7 +299,10 @@ const CreateAccountScreen = ({ navigation }) => {
         fetchPolicy: 'no-cache'
       })
 
-      const {  success, message } = data.createAccount;
+      const {  success, message, token } = data.createAccount;
+
+      // Save the token in cookies
+      await saveToken(token);
 
       // TO DO: Add loading and success message in UI
       // This is a example
