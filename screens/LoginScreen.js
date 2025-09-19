@@ -10,11 +10,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import client from "../lib/apolloClient";
 import { LOGIN_ACCOUNT } from '../graphql/mutations/loginAccount';
-import { saveToken, getToken } from "../lib/cookies";
+import { EXTRACT_PHONE_FROM_TOKEN } from "../graphql/queries/extractPhoneToken";
+import { saveToken, getToken, getPhoneToken } from "../lib/cookies";
 
 const LoginScreen = ({ navigation, route }) => {
   const [pin, setPin] = useState('');
-  const [currentAccount, setCurrentAccount] = useState('+63949150024');
+  const [currentAccount, setCurrentAccount] = useState('');
 
   useEffect(() => {
     if (route.params?.newAccount) {
@@ -23,6 +24,50 @@ const LoginScreen = ({ navigation, route }) => {
       navigation.setParams({ newAccount: undefined });
     }
   }, [route.params, navigation]);
+
+  /*
+    On render get token from cookies to get phone number if exist
+    else navigate to switch account to enter phone number
+  */
+  useEffect(() => {
+    const onLoad = async () => {
+      try {
+        const token = await getPhoneToken();
+
+        if (token && typeof token === "string") {
+          const { data } = await client.query({
+            query: EXTRACT_PHONE_FROM_TOKEN,
+            fetchPolicy: 'no-cache',
+            context: {
+              headers: {
+                Authorization: token,
+              }
+            }
+          })
+  
+          const { success, message, phone } = data.extractPhoneFromToken;
+
+          console.log(success, message, phone);
+  
+          if (!success) {
+            Alert.alert('Error', 'Invalid token');
+            navigation.navigate('SwitchAccount');
+            return;
+          }
+          
+          setCurrentAccount(phone);
+          return;
+        }
+  
+        navigation.navigate('SwitchAccount');
+        
+      } catch (err) {
+        console.log(err);
+      }
+    }
+
+    onLoad();
+  }, [])
 
   const handleNumberPress = (number) => {
     if (pin.length < 4) {
