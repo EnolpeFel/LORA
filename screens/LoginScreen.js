@@ -161,7 +161,7 @@ const LoginScreen = ({ navigation, route }) => {
           style={styles.logo}
         />
         
-        <Text style={styles.title}>Enter Your MPIN</Text>
+        <Text style={styles.title}>Enter Your PIN</Text>
         
         {/* Account Number Display */}
         <Text style={styles.accountNumberText}>
