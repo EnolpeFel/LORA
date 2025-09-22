@@ -12,6 +12,7 @@ import TransferScreen from "./screens/TransferScreen";
 import QRPayScreen from "./screens/QRPayScreen";
 import CashInScreen from "./screens/CashInScreen";
 import PayNowScreen from "./screens/PayNowScreen";
+import CreditReportScreen from "./screens/CreditReportScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -38,6 +39,14 @@ export default function App() {
           name="Dashboard" 
           component={DashboardScreen} 
         />
+        <Stack.Screen 
+  name="CreditReport" 
+  component={CreditReportScreen}
+  options={{
+    headerShown: false,
+    presentation: 'modal' // Optional: makes it slide up like a modal
+  }}
+/>
         <Stack.Screen 
           name="Loans" 
           component={LoansScreen} 
