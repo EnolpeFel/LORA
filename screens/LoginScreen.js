@@ -1,18 +1,26 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Alert,
   Image,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const LoginScreen = ({ navigation }) => {
+const LoginScreen = ({ navigation, route }) => {
   const [pin, setPin] = useState('');
-  const correctPin = '1111'; //static
-  const accountNumber = '+63 949150024'; // static
+  const [currentAccount, setCurrentAccount] = useState('+63949150024');
+  const correctPin = '1111';
+
+  useEffect(() => {
+    if (route.params?.newAccount) {
+      setCurrentAccount(route.params.newAccount);
+      setPin('');
+      navigation.setParams({ newAccount: undefined });
+    }
+  }, [route.params, navigation]);
 
   const handleNumberPress = (number) => {
     if (pin.length < 4) {
@@ -28,9 +36,18 @@ const LoginScreen = ({ navigation }) => {
     if (pin === correctPin) {
       navigation.navigate('Dashboard');
     } else {
-      Alert.alert('Invalid PIN', 'Please enter the correct 4-digit PIN');
+      Alert.alert('Invalid MPIN', 'Please enter the correct 4-digit MPIN');
       setPin('');
     }
+  };
+
+  const handleSwitchAccount = () => {
+    navigation.navigate('SwitchAccount');
+  };
+
+  const handleCreateAccount = () => {
+    // Navigate to create account screen
+    navigation.navigate('CreateAccount');
   };
 
   const renderNumberButton = (number) => (
@@ -44,34 +61,47 @@ const LoginScreen = ({ navigation }) => {
     </TouchableOpacity>
   );
 
+  const renderPinDots = () => (
+    <View style={styles.pinContainer}>
+      {[0, 1, 2, 3].map((i) => (
+        <View 
+          key={i} 
+          style={[
+            styles.pinDot, 
+            i < pin.length && styles.pinDotFilled
+          ]}
+        />
+      ))}
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         {/* Logo */}
         <Image 
-          source={require('../assets/LoraLogo.png')}  
+          source={require('../assets/LoraLogo.png')} 
           style={styles.logo}
         />
         
-        <Text style={styles.title}>Enter Your PIN</Text>
+        <Text style={styles.title}>Enter Your MPIN</Text>
         
         {/* Account Number Display */}
         <Text style={styles.accountNumberText}>
-          Your account number: {accountNumber}
+          {currentAccount}
         </Text>
 
+        {/* Switch Account Button - Moved below account number */}
+        <TouchableOpacity 
+          style={styles.switchAccountButton}
+          onPress={handleSwitchAccount}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.switchAccountText}>Switch Account</Text>
+        </TouchableOpacity>
+
         {/* PIN Display Dots */}
-        <View style={styles.pinContainer}>
-          {[0, 1, 2, 3].map((i) => (
-            <View 
-              key={i} 
-              style={[
-                styles.pinDot, 
-                i < pin.length && styles.pinDotFilled
-              ]}
-            />
-          ))}
-        </View>
+        {renderPinDots()}
 
         {/* Number Pad */}
         <View style={styles.numberPad}>
@@ -96,6 +126,15 @@ const LoginScreen = ({ navigation }) => {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Create Account Button - Added above login button */}
+        <TouchableOpacity 
+          style={styles.createAccountButton}
+          onPress={handleCreateAccount}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.createAccountText}>Create Account</Text>
+        </TouchableOpacity>
 
         {/* Login Button */}
         <TouchableOpacity 
@@ -137,17 +176,19 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '600',
     color: '#374151',
-    marginBottom: 16, // Reduced margin to accommodate account number
+    marginBottom: 16,
   },
   accountNumberText: {
     fontSize: 16,
     color: '#6b7280',
-    marginBottom: 16,
+    marginBottom: 8,
+    textAlign: 'center',
   },
   pinContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     marginBottom: 40,
+    marginTop: 16,
   },
   pinDot: {
     width: 20,
@@ -224,6 +265,24 @@ const styles = StyleSheet.create({
   },
   loginButtonText: {
     color: 'white',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  switchAccountButton: {
+    marginBottom: 24,
+  },
+  switchAccountText: {
+    color: '#f97316',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  createAccountButton: {
+    marginBottom: 16,
+    width: '100%',
+    alignItems: 'center',
+  },
+  createAccountText: {
+    color: '#3b82f6',
     fontSize: 16,
     fontWeight: '500',
   },

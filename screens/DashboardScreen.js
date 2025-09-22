@@ -993,15 +993,15 @@
 
         {/* Action Buttons */}
         <View style={styles.actionButtonsContainer}>
-          <TouchableOpacity 
-            style={styles.secondaryButton}
-            onPress={() => {
-              setShowCreditScoreModal(false);
-              // Navigate to credit report details
-            }}
-          >
-            <Text style={styles.secondaryButtonText}>View Full Report</Text>
-          </TouchableOpacity>
+         <TouchableOpacity 
+  style={styles.secondaryButton}
+  onPress={() => {
+    setShowCreditScoreModal(false);
+    navigation.navigate('CreditReport'); // Update this line
+  }}
+>
+  <Text style={styles.secondaryButtonText}>View Full Report</Text>
+</TouchableOpacity>
           
           <TouchableOpacity 
             style={styles.applyLoanButton}

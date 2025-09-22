@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { SEND_MPIN, VERIFY_MPIN } from "../graphql/queries/sendVerifyMpin";
+import { CREATE_ACCOUNT } from '../graphql/mutations/createAccount';
 import client from "../lib/apolloClient";
 
 const { width, height } = Dimensions.get('window');
@@ -235,7 +236,7 @@ const CreateAccountScreen = ({ navigation }) => {
     }
   };
 
-  const handleSubmitPin = () => {
+  const handleSubmitPin = async () => {
     const enteredPin = pin.join('');
     const enteredConfirmPin = confirmPin.join('');
 
@@ -246,6 +247,72 @@ const CreateAccountScreen = ({ navigation }) => {
 
     if (enteredPin !== enteredConfirmPin) {
       Alert.alert('Error', 'PINs do not match');
+      return;
+    }
+
+    // Compile the data
+    const {  
+      firstName,
+      middleName,
+      lastName,
+      suffix,
+      birthdate,
+      gender,
+      nationality,
+    } = userDetails;
+
+    const {
+      country,
+      province,
+      municipality,
+      barangay,
+      street,
+    } = address;
+
+    // Convert birthdate into ISO format for API YYYY-MM-DD
+    const dateParts = birthdate.split('/');
+    const birthdateISO = `${dateParts[2]}-${dateParts[0]}-${dateParts[1]}`;
+
+    const compiledData = {
+      phone: phoneNumber,
+      fname: firstName,
+      mname: middleName !== "" ? middleName : null,
+      lname: lastName,
+      suffix: suffix !== "" ? suffix : null,
+      birthdate: new Date(birthdateISO),
+      gender: gender !== "" ? gender : null,
+      nationality: nationality !== "" ? nationality : null,
+      country,
+      province,
+      municipality,
+      barangay,
+      address_text: street,
+      pinCode: pin.join('')
+    }
+
+    // Create account mutation
+    try {
+      const { data } = await client.mutate({
+        mutation: CREATE_ACCOUNT,
+        variables: { data: compiledData },
+        fetchPolicy: 'no-cache'
+      })
+
+      const {  success, message } = data.createAccount;
+
+      // TO DO: Add loading and success message in UI
+      // This is a example
+
+      console.log(success, message);
+
+      // TO DO: Add error message in UI
+      if (!success) {
+        return;
+      }
+
+    } catch (err) {
+      // TO DO: Add error message in UI
+      console.log(err);
       return;
     }
 
