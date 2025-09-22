@@ -23,9 +23,10 @@ const PayNowScreen = ({ navigation, route }) => {
   const [walletBalance, setWalletBalance] = useState(12500.75);
   const [loanDetails, setLoanDetails] = useState(null);
   const [showReceiptDetails, setShowReceiptDetails] = useState(false);
+  const [newTransaction, setNewTransaction] = useState(null);
 
   // Get loan application data from navigation params
-  const { loanApplication } = route.params || {};
+  const { loanApplication, transactions = [] } = route.params || {};
 
   useEffect(() => {
     if (loanApplication) {
@@ -167,11 +168,43 @@ const PayNowScreen = ({ navigation, route }) => {
   };
 
   const processPayment = () => {
+    if (!selectedPaymentMethod || !loanDetails) {
+      Alert.alert('Error', 'Payment method or loan details not available');
+      return;
+    }
+
     setIsProcessing(true);
 
     setTimeout(() => {
       setIsProcessing(false);
       setShowPaymentModal(false);
+
+      // Create new transaction record
+      const transactionId = `TXN-${Date.now()}`;
+      const currentDate = new Date();
+      const newTransactionRecord = {
+        id: transactionId,
+        type: 'Payment',
+        amount: loanDetails.totalAmountDue.toFixed(2),
+        date: currentDate.toLocaleDateString('en-US', { 
+          month: 'short', 
+          day: 'numeric', 
+          year: 'numeric' 
+        }),
+        time: currentDate.toLocaleTimeString('en-US', { 
+          hour: 'numeric', 
+          minute: '2-digit', 
+          hour12: true 
+        }),
+        status: 'Completed',
+        loanId: loanDetails.applicationId,
+        transactionId: transactionId,
+        paymentMethod: selectedPaymentMethod.name,
+        lender: loanDetails.lender,
+        loanType: loanDetails.loanType
+      };
+
+      setNewTransaction(newTransactionRecord);
 
       // If paying with wallet, deduct from balance
       if (selectedPaymentMethod.id === 'wallet') {
@@ -184,12 +217,27 @@ const PayNowScreen = ({ navigation, route }) => {
 
   const goBackToDashboard = () => {
     setShowConfirmationModal(false);
-    navigation.navigate('Dashboard');
+    
+    // Navigate back with updated transaction data
+    const updatedTransactions = newTransaction ? [newTransaction, ...transactions] : transactions;
+    
+    navigation.navigate('Dashboard', { 
+      newTransaction: newTransaction,
+      updatedTransactions: updatedTransactions
+    });
   };
 
   // Function to navigate to Dashboard
   const goToDashboard = () => {
     navigation.navigate('Dashboard');
+  };
+
+  // Function to navigate to transactions
+  const goToTransactions = () => {
+    const updatedTransactions = newTransaction ? [newTransaction, ...transactions] : transactions;
+    navigation.navigate('Transactions', { 
+      transactions: updatedTransactions 
+    });
   };
 
   // Show loading while processing loan application data
@@ -221,8 +269,8 @@ const PayNowScreen = ({ navigation, route }) => {
           <MaterialIcons name="arrow-back" size={24} color="white" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Pay for Loan</Text>
-        <TouchableOpacity>
-          <MaterialIcons name="info-outline" size={24} color="white" />
+        <TouchableOpacity onPress={goToTransactions}>
+          <MaterialIcons name="receipt" size={24} color="white" />
         </TouchableOpacity>
       </View>
 
@@ -325,7 +373,7 @@ const PayNowScreen = ({ navigation, route }) => {
                 <View style={styles.receiptDetailRow}>
                   <Text style={styles.receiptDetailLabel}>Principal Amount:</Text>
                   <Text style={styles.receiptDetailValueAmount}>
-                    {loanDetails.isProcessing ? '--' : `\u20b1${loanDetails.loanAmount.toLocaleString()}`}
+                    {loanDetails.isProcessing ? '--' : `₱${loanDetails.loanAmount.toLocaleString()}`}
                   </Text>
                 </View>
                 <View style={styles.receiptDetailRow}>
@@ -338,15 +386,15 @@ const PayNowScreen = ({ navigation, route }) => {
                   <>
                     <View style={styles.receiptDetailRow}>
                       <Text style={styles.receiptDetailLabel}>Total Interest:</Text>
-                      <Text style={styles.receiptDetailValueAmount}>\u20b1{loanDetails.totalInterest.toFixed(2)}</Text>
+                      <Text style={styles.receiptDetailValueAmount}>₱{loanDetails.totalInterest.toFixed(2)}</Text>
                     </View>
                     <View style={styles.receiptDetailRow}>
                       <Text style={styles.receiptDetailLabel}>Processing Fee:</Text>
-                      <Text style={styles.receiptDetailValueAmount}>\u20b1{loanDetails.processingFee.toFixed(2)}</Text>
+                      <Text style={styles.receiptDetailValueAmount}>₱{loanDetails.processingFee.toFixed(2)}</Text>
                     </View>
                     <View style={styles.receiptHighlightRow}>
                       <Text style={styles.receiptHighlightLabel}>Net Amount to Receive:</Text>
-                      <Text style={styles.receiptNetReleaseValue}>\u20b1{loanDetails.netRelease.toFixed(2)}</Text>
+                      <Text style={styles.receiptNetReleaseValue}>₱{loanDetails.netRelease.toFixed(2)}</Text>
                     </View>
                   </>
                 )}
@@ -541,8 +589,18 @@ const PayNowScreen = ({ navigation, route }) => {
             styles.payButton,
             loanDetails.isProcessing && styles.disabledButton
           ]}
-          onPress={() => loanDetails.isProcessing ? handlePaymentMethodSelect({}) : setShowPaymentModal(true)}
-          disabled={loanDetails.isProcessing}
+          onPress={() => {
+            if (loanDetails.isProcessing) {
+              Alert.alert(
+                'Loan Still Processing',
+                'Your loan application is still being processed. Payment will be available once your loan is approved and active.',
+                [{ text: 'OK' }]
+              );
+            } else {
+              setShowPaymentModal(true);
+            }
+          }}
+          disabled={false} // Remove disabled prop to allow press for alert
         >
           <Text style={[
             styles.payButtonText,
@@ -554,7 +612,10 @@ const PayNowScreen = ({ navigation, route }) => {
 
         {/* Additional Options */}
         <View style={styles.additionalOptions}>
-          <TouchableOpacity style={styles.optionItem}>
+          <TouchableOpacity 
+            style={styles.optionItem}
+            onPress={goToTransactions}
+          >
             <Text style={styles.optionText}>Loan Transaction History</Text>
             <MaterialIcons name="chevron-right" size={24} color="#6B7280" />
           </TouchableOpacity>
@@ -605,10 +666,17 @@ const PayNowScreen = ({ navigation, route }) => {
                         method.id === 'wallet' && !method.available && styles.unavailableMethod
                       ]}
                       onPress={() => {
+                        if (method.id === 'wallet' && !method.available) {
+                          Alert.alert(
+                            'Insufficient Balance',
+                            'Your wallet balance is insufficient for this payment. Please choose another payment method.',
+                            [{ text: 'OK' }]
+                          );
+                          return;
+                        }
                         setSelectedPaymentMethod(method);
                         processPayment();
                       }}
-                      disabled={method.id === 'wallet' && !method.available}
                     >
                       <View style={styles.paymentMethodLeft}>
                         <MaterialIcons
@@ -647,7 +715,7 @@ const PayNowScreen = ({ navigation, route }) => {
             ) : (
               <View style={styles.processingContainer}>
                 <MaterialIcons name="hourglass-empty" size={40} color="#4F46E5" />
-                <Text style={styles.processingText}>Processing Payment...</Text>
+                <Text style={styles.processingTitle}>Processing Payment...</Text>
                 <Text style={styles.processingSubtext}>Please wait while we process your payment</Text>
               </View>
             )}
@@ -675,7 +743,7 @@ const PayNowScreen = ({ navigation, route }) => {
 
             <View style={styles.successDetails}>
               <Text style={styles.successDetailLabel}>Transaction ID:</Text>
-              <Text style={styles.successDetailValue}>TXN-{Date.now()}</Text>
+              <Text style={styles.successDetailValue}>{newTransaction?.transactionId || 'N/A'}</Text>
             </View>
 
             <View style={styles.successDetails}>
@@ -683,12 +751,29 @@ const PayNowScreen = ({ navigation, route }) => {
               <Text style={styles.successDetailValue}>PHP {loanDetails.totalAmountDue.toFixed(2)}</Text>
             </View>
 
-            <TouchableOpacity
-              style={styles.successButton}
-              onPress={goBackToDashboard}
-            >
-              <Text style={styles.successButtonText}>Got it!</Text>
-            </TouchableOpacity>
+            <View style={styles.successDetails}>
+              <Text style={styles.successDetailLabel}>Payment Method:</Text>
+              <Text style={styles.successDetailValue}>{selectedPaymentMethod?.name || 'N/A'}</Text>
+            </View>
+
+            <View style={styles.successActions}>
+              <TouchableOpacity
+                style={styles.viewTransactionButton}
+                onPress={() => {
+                  setShowConfirmationModal(false);
+                  goToTransactions();
+                }}
+              >
+                <Text style={styles.viewTransactionButtonText}>View Transaction</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.successButton}
+                onPress={goBackToDashboard}
+              >
+                <Text style={styles.successButtonText}>Got it!</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -1105,6 +1190,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 40,
   },
+  processingTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  processingSubtext: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
   successModal: {
     width: '90%',
     backgroundColor: 'white',
@@ -1152,17 +1249,39 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1F2937',
   },
+  successActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 20,
+    width: '100%',
+  },
+  viewTransactionButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#4F46E5',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    flex: 1,
+  },
+  viewTransactionButtonText: {
+    color: '#4F46E5',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
   successButton: {
     backgroundColor: '#8B5CF6',
     paddingVertical: 12,
-    paddingHorizontal: 40,
+    paddingHorizontal: 20,
     borderRadius: 8,
-    marginTop: 20,
+    flex: 1,
   },
   successButtonText: {
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
+    textAlign: 'center',
   },
   loadingContainer: {
     flex: 1,
