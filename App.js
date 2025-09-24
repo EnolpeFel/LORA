@@ -41,20 +41,18 @@ export default function App() {
           name="Dashboard" 
           component={DashboardScreen} 
         />
-        <Stack.Screen 
-
-  name="CreditReport" 
-  component={CreditReportScreen}
-  options={{
-    headerShown: false,
-    presentation: 'modal' // Optional: makes it slide up like a modal
-  }}
-/>
-
+        <Stack.Screen
+          name="CreditReport" 
+          component={CreditReportScreen}
+          options={{
+            headerShown: false,
+            presentation: 'modal' // Optional: makes it slide up like a modal
+          }}
+          />
+        <Stack.Screen
           name="Profile" 
           component={ProfileScreen} 
         />
-
         <Stack.Screen 
           name="Loans" 
           component={LoansScreen} 
