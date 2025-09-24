@@ -14,6 +14,7 @@ import CashInScreen from "./screens/CashInScreen";
 import PayNowScreen from "./screens/PayNowScreen";
 import CreditReportScreen from "./screens/CreditReportScreen";
 import ProfileScreen from "./screens/ProfileScreen";
+import SwitchAccountScreen from "./screens/SwitchAccountScreen";
 
 
 const Stack = createNativeStackNavigator();
@@ -34,6 +35,10 @@ export default function App() {
         <Stack.Screen 
           name="CreateAccount" 
           component={CreateAccountScreen} 
+        />
+        <Stack.Screen 
+          name="SwitchAccount" 
+          component={SwitchAccountScreen} 
         />
 
         {/* Main App Screens */}
