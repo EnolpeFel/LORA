@@ -13,9 +13,15 @@ import {
   View,
   ActivityIndicator,
   Dimensions,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
+// Conditional import for DateTimePicker
+let DateTimePicker;
+if (Platform.OS !== 'web') {
+  DateTimePicker = require('@react-native-community/datetimepicker').default;
+}
 import { SEND_MPIN, VERIFY_MPIN } from "../graphql/queries/sendVerifyMpin";
 import { CREATE_ACCOUNT } from '../graphql/mutations/createAccount';
 import client from "../lib/apolloClient";
@@ -35,11 +41,12 @@ const CreateAccountScreen = ({ navigation }) => {
     middleName: '',
     lastName: '',
     suffix: '',
-    birthdate: '',
+    birthdate: null,
     gender: '',
     nationality: '',
     agreed: false
   });
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [address, setAddress] = useState({
     country: '',
     province: '',
@@ -176,8 +183,27 @@ const CreateAccountScreen = ({ navigation }) => {
       Alert.alert('Error', 'Please fill in all required fields');
       return;
     }
+    
+    // Validate name fields contain only valid characters
+    if (userDetails.firstName && !/^[a-zA-Z\s\-']+$/.test(userDetails.firstName)) {
+      Alert.alert('Error', 'First name can only contain letters, spaces, hyphens, and apostrophes');
+      return;
+    }
+    if (userDetails.middleName && !/^[a-zA-Z\s\-']+$/.test(userDetails.middleName)) {
+      Alert.alert('Error', 'Middle name can only contain letters, spaces, hyphens, and apostrophes');
+      return;
+    }
+    if (userDetails.lastName && !/^[a-zA-Z\s\-']+$/.test(userDetails.lastName)) {
+      Alert.alert('Error', 'Last name can only contain letters, spaces, hyphens, and apostrophes');
+      return;
+    }
+    if (userDetails.suffix && !/^[a-zA-Z\sIVX]+$/.test(userDetails.suffix)) {
+      Alert.alert('Error', 'Suffix can only contain letters, spaces, and Roman numerals (I, V, X)');
+      return;
+    }
+    
     if (!validateBirthdate()) {
-      Alert.alert('Error', 'Please enter a valid birthdate (MM/DD/YYYY)');
+      Alert.alert('Error', 'Please enter a valid birthdate. You must be at least 13 years old and not more than 120 years old.');
       return;
     }
     if (!userDetails.agreed) {
@@ -270,8 +296,7 @@ const CreateAccountScreen = ({ navigation }) => {
     } = address;
 
     // Convert birthdate into ISO format for API YYYY-MM-DD
-    const dateParts = birthdate.split('/');
-    const birthdateISO = `${dateParts[2]}-${dateParts[0]}-${dateParts[1]}`;
+    const birthdateISO = birthdate.toISOString().split('T')[0];
 
     const compiledData = {
       phone: phoneNumber,
@@ -321,37 +346,55 @@ const CreateAccountScreen = ({ navigation }) => {
   };
 
   // Helper functions
-  const formatBirthdate = (text) => {
-    let cleaned = text.replace(/[^0-9]/g, '');
-    if (cleaned.length > 8) cleaned = cleaned.slice(0, 8);
-    
-    let formatted = '';
-    if (cleaned.length > 0) {
-      formatted = cleaned.slice(0, 2);
-      if (cleaned.length > 2) {
-        formatted += '/' + cleaned.slice(2, 4);
-        if (cleaned.length > 4) {
-          formatted += '/' + cleaned.slice(4, 8);
-        }
-      }
-    }
-    setUserDetails({...userDetails, birthdate: formatted});
+  const validateNameField = (text) => {
+    // Only allow letters, spaces, hyphens, and apostrophes
+    // Remove any special characters and numbers
+    return text.replace(/[^a-zA-Z\s\-']/g, '');
+  };
+
+  const validateSuffixField = (text) => {
+    // Allow letters, spaces, and Roman numerals (I, V, X)
+    // Remove any other special characters and numbers
+    return text.replace(/[^a-zA-Z\sIVX]/g, '');
+  };
+
+  const handleDateChange = (event, selectedDate) => {
+    console.log('Date picker changed:', event.type, selectedDate);
+    const currentDate = selectedDate || userDetails.birthdate;
+    setShowDatePicker(Platform.OS === 'ios');
+    setUserDetails({...userDetails, birthdate: currentDate});
+  };
+
+  const formatDateDisplay = (date) => {
+    if (!date) return '';
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+  };
+
+  const showDatePickerModal = () => {
+    console.log('Date picker button pressed');
+    setShowDatePicker(true);
   };
 
   const validateBirthdate = () => {
     const { birthdate } = userDetails;
     if (!birthdate) return false;
     
-    const parts = birthdate.split('/');
-    if (parts.length !== 3) return false;
+    const today = new Date();
+    const birthYear = birthdate.getFullYear();
+    const currentYear = today.getFullYear();
     
-    const [month, day, year] = parts.map(Number);
-    if (month < 1 || month > 12) return false;
-    if (day < 1 || day > 31) return false;
-    if (year < 1900 || year > new Date().getFullYear()) return false;
+    // Check if birthdate is in the future
+    if (birthdate > today) return false;
     
-    const daysInMonth = new Date(year, month, 0).getDate();
-    return day <= daysInMonth;
+    // Check if age is reasonable (between 13 and 120 years old)
+    const age = currentYear - birthYear;
+    if (age < 13 || age > 120) return false;
+    
+    return true;
   };
 
   const selectGender = (gender) => {
@@ -422,6 +465,7 @@ const CreateAccountScreen = ({ navigation }) => {
     setShowProvinceDropdown(false);
     setShowMunicipalityDropdown(false);
     setShowBarangayDropdown(false);
+    // Don't close date picker here as it has its own handling
   };
 
   const toggleGenderDropdown = () => {
@@ -820,7 +864,7 @@ const CreateAccountScreen = ({ navigation }) => {
                 style={styles.input}
                 placeholder="Enter first name"
                 value={userDetails.firstName}
-                onChangeText={(text) => setUserDetails({...userDetails, firstName: text})}
+                onChangeText={(text) => setUserDetails({...userDetails, firstName: validateNameField(text)})}
               />
               
               <Text style={styles.label}>Middle Name (optional)</Text>
@@ -828,7 +872,7 @@ const CreateAccountScreen = ({ navigation }) => {
                 style={styles.input}
                 placeholder="Enter middle name"
                 value={userDetails.middleName}
-                onChangeText={(text) => setUserDetails({...userDetails, middleName: text})}
+                onChangeText={(text) => setUserDetails({...userDetails, middleName: validateNameField(text)})}
               />
               
               <Text style={styles.label}>Last Name *</Text>
@@ -836,7 +880,7 @@ const CreateAccountScreen = ({ navigation }) => {
                 style={styles.input}
                 placeholder="Enter last name"
                 value={userDetails.lastName}
-                onChangeText={(text) => setUserDetails({...userDetails, lastName: text})}
+                onChangeText={(text) => setUserDetails({...userDetails, lastName: validateNameField(text)})}
               />
               
               <Text style={styles.label}>Suffix (optional)</Text>
@@ -844,18 +888,63 @@ const CreateAccountScreen = ({ navigation }) => {
                 style={styles.input}
                 placeholder="Enter suffix (Jr, Sr, II, III, IV, V, VI)"
                 value={userDetails.suffix}
-                onChangeText={(text) => setUserDetails({...userDetails, suffix: text})}
+                onChangeText={(text) => setUserDetails({...userDetails, suffix: validateSuffixField(text)})}
               />
               
               <Text style={styles.label}>Birthdate *</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="MM/DD/YYYY"
-                value={userDetails.birthdate}
-                onChangeText={formatBirthdate}
-                keyboardType="number-pad"
-                maxLength={10}
-              />
+              <TouchableOpacity 
+                style={styles.datePickerButton}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  showDatePickerModal();
+                }}
+              >
+                <View style={styles.datePickerContent}>
+                  <View style={styles.datePickerIconContainer}>
+                    <Text style={styles.datePickerIcon}>📅</Text>
+                  </View>
+                  <Text style={userDetails.birthdate ? styles.datePickerText : styles.datePickerPlaceholder}>
+                    {userDetails.birthdate ? formatDateDisplay(userDetails.birthdate) : 'Select your birthdate'}
+                  </Text>
+                  <Text style={styles.datePickerArrow}>▼</Text>
+                </View>
+              </TouchableOpacity>
+              
+              {showDatePicker && Platform.OS !== 'web' && DateTimePicker && (
+                <DateTimePicker
+                  value={userDetails.birthdate || new Date(2000, 0, 1)}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={handleDateChange}
+                  maximumDate={new Date()}
+                  minimumDate={new Date(1900, 0, 1)}
+                  textColor="#000000"
+                />
+              )}
+              
+              {showDatePicker && Platform.OS === 'web' && (
+                <View style={styles.webDatePickerContainer}>
+                  <Text style={styles.webDatePickerLabel}>Select Date:</Text>
+                  <input
+                    type="date"
+                    value={userDetails.birthdate ? userDetails.birthdate.toISOString().split('T')[0] : ''}
+                    onChange={(e) => {
+                      const selectedDate = new Date(e.target.value);
+                      setUserDetails({...userDetails, birthdate: selectedDate});
+                      setShowDatePicker(false);
+                    }}
+                    max={new Date().toISOString().split('T')[0]}
+                    min={new Date(1900, 0, 1).toISOString().split('T')[0]}
+                    style={styles.webDateInput}
+                  />
+                  <TouchableOpacity 
+                    style={styles.webDatePickerButton}
+                    onPress={() => setShowDatePicker(false)}
+                  >
+                    <Text style={styles.webDatePickerButtonText}>Done</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
 
               <Text style={styles.sectionTitle}>ADDITIONAL INFORMATION</Text>
               
@@ -1210,6 +1299,94 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#ddd',
     fontSize: 16,
+  },
+  datePickerButton: {
+    backgroundColor: '#f9f9f9',
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  datePickerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  datePickerIconContainer: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#f3f4f6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  datePickerIcon: {
+    fontSize: 12,
+  },
+  datePickerText: {
+    flex: 1,
+    fontSize: 16,
+    color: '#111827',
+    fontWeight: '500',
+  },
+  datePickerPlaceholder: {
+    flex: 1,
+    fontSize: 16,
+    color: '#9ca3af',
+    fontStyle: 'italic',
+  },
+  datePickerArrow: {
+    color: '#6b7280',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  webDatePickerContainer: {
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 12,
+    marginTop: 10,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  webDatePickerLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 10,
+    color: '#374151',
+  },
+  webDateInput: {
+    width: '100%',
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    fontSize: 16,
+    marginBottom: 15,
+    backgroundColor: '#f9fafb',
+  },
+  webDatePickerButton: {
+    backgroundColor: '#ea580c',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  webDatePickerButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '500',
   },
   dropdownList: {
     backgroundColor: 'white',
