@@ -10,6 +10,9 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { Checkbox } from 'expo-checkbox';
 import { Ionicons } from '@expo/vector-icons';
+import * as FileSystem from "expo-file-system";
+import { SUBMIT_LOAN_APPLICATION } from "../actions/loans.action";
+import{ GET_LENDING_COMPANIES } from "../actions/companies.action";
 
 const { width } = Dimensions.get('window');
 
@@ -35,6 +38,7 @@ const [otherCollateralText, setOtherCollateralText] = useState('');
 const [purpose, setPurpose] = useState('');
 
 // Lending Company states
+const [companies, setCompanies] = useState([]);
 const [selectedCompany, setSelectedCompany] = useState(null);
 const [modalVisible, setModalVisible] = useState(false);
 const [selectedCompanyInfo, setSelectedCompanyInfo] = useState(null);
@@ -116,69 +120,10 @@ const documentSubclasses = {
 ]
 };
 
-// Updated lending companies with specific requirements
-const companies = [
-{
-id: 1,
-name: 'OCS Lending Incorporated',
-logo: 'https://placehold.co/50x50',
-interestType: 'Straight',
-interestRate: '7.5%',
-requirements: ['Valid ID', 'Barangay Clearance', 'Collateral (if bank should provide form for the account of the bank)'],
-physicalVisitation: true,
-minAmount: 5000,
-maxAmount: 100000,
-minTerm: 2,
-maxTerm: 24,
-processingFee: 750,
-info: 'OCS Lending Incorporated offers straight interest loans with physical visitation requirement. Established in 2010, we have served over 50,000 customers nationwide.',
-processingTime: '3-5 business days',
-contact: '+63 912 345 6789',
-address: '123 Main Street, Manila, Philippines',
-rating: 4.5,
-reviews: 1245
-},
-{
-id: 2,
-name: 'PNJ Lending Company',
-logo: 'https://placehold.co/50x50',
-interestType: 'Straight',
-interestRate: '10%',
-requirements: ['Valid ID', 'Barangay Clearance', 'Medical Cert', 'Collateral (if bank should provide form for the account of the bank)'],
-physicalVisitation: false,
-minAmount: 3000,
-maxAmount: 50000,
-minTerm: 1,
-maxTerm: 12,
-processingFee: 0,
-info: 'PNJ Lending Company provides straight interest loans with online processing. We offer quick approval and disbursement within 24 hours for qualified applicants.',
-processingTime: '1-2 business days',
-contact: '+63 917 890 1234',
-address: '456 Commerce Ave, Cebu City, Philippines',
-rating: 4.2,
-reviews: 876
-},
-{
-id: 3,
-name: 'San Hec Bro Lending Incorporated',
-logo: 'https://placehold.co/50x50',
-interestType: 'Diminishing',
-interestRate: '5% monthly',
-requirements: ['Valid ID', 'PSA', 'Barangay Clearance', 'Medical Cert', 'Collateral (if bank should provide form for the account of the bank)'],
-physicalVisitation: false,
-minAmount: 10000,
-maxAmount: 200000,
-minTerm: 3,
-maxTerm: 36,
-processingFee: 500,
-info: 'San Hec Bro Lending Incorporated offers diminishing interest loans with flexible terms. Our mission is to provide affordable credit solutions to Filipinos.',
-processingTime: '2-3 business days',
-contact: '+63 918 765 4321',
-address: '789 Business Park, Davao City, Philippines',
-rating: 4.7,
-reviews: 1567
-}
-];
+// Convert to PHP
+const convertToPHP = (amount) => {
+  return parseFloat(amount).toLocaleString("en-PH", { style: "currency", currency: "PHP" });
+};
 
 // Animate progress bar on step change
 useEffect(() => {
@@ -200,40 +145,40 @@ useNativeDriver: true
 
 // Validate form fields
 const validateField = (name, value) => {
-let error = '';
+  let error = '';
 
-switch (name) {
-case 'loanAmount':
-if (!value) error = 'Loan amount is required';
-else if (isNaN(value) || parseFloat(value) <= 0) error = 'Enter a valid amount';
-else if (selectedCompany) {
-const company = companies.find(c => c.id === selectedCompany);
-if (parseFloat(value) < company.minAmount) error = `Minimum amount is \u20b1${company.minAmount.toLocaleString()}`;
-if (parseFloat(value) > company.maxAmount) error = `Maximum amount is \u20b1${company.maxAmount.toLocaleString()}`;
-}
-break;
-case 'terms':
-if (!value) error = 'Loan term is required';
-else if (isNaN(value) || parseInt(value) <= 0) error = 'Enter a valid term';
-else if (selectedCompany) {
-const company = companies.find(c => c.id === selectedCompany);
-if (parseInt(value) < company.minTerm) error = `Minimum term is ${company.minTerm} months`;
-if (parseInt(value) > company.maxTerm) error = `Maximum term is ${company.maxTerm} months`;
-}
-break;
-case 'monthlyIncome':
-if (!value) error = 'Monthly income is required';
-else if (isNaN(value) || parseFloat(value) <= 0) error = 'Enter a valid income';
-break;
-case 'purpose':
-if (!value) error = 'Loan purpose is required';
-break;
-default:
-break;
-}
+  switch (name) {
+    case 'loanAmount':
+      if (!value) error = 'Loan amount is required';
+      else if (isNaN(value) || parseFloat(value) <= 0) error = 'Enter a valid amount';
+      else if (selectedCompany) {
+        const company = companies.find(c => c.id === selectedCompany);
+        if (parseFloat(value) < company.minAmount) error = `Minimum amount is \u20b1${company.minAmount.toLocaleString()}`;
+        if (parseFloat(value) > company.maxAmount) error = `Maximum amount is \u20b1${company.maxAmount.toLocaleString()}`;
+      }
+      break;
+    case 'terms':
+      if (!value) error = 'Loan term is required';
+      else if (isNaN(value) || parseInt(value) <= 0) error = 'Enter a valid term';
+      else if (selectedCompany) {
+        const company = companies.find(c => c.id === selectedCompany);
+        if (parseInt(value) < company.minTerm) error = `Minimum term is ${company.minTerm} months`;
+        if (parseInt(value) > company.maxTerm) error = `Maximum term is ${company.maxTerm} months`;
+      }
+      break;
+    case 'monthlyIncome':
+      if (!value) error = 'Monthly income is required';
+      else if (isNaN(value) || parseFloat(value) <= 0) error = 'Enter a valid income';
+      break;
+    case 'purpose':
+      if (!value) error = 'Loan purpose is required';
+      break;
+    default:
+      break;
+  }
 
-setErrors(prev => ({ ...prev, [name]: error }));
-return error === '';
+  setErrors(prev => ({ ...prev, [name]: error }));
+  return error === '';
 };
 
 const handleBlur = (name, value) => {
@@ -242,14 +187,14 @@ validateField(name, value);
 };
 
 // Calculate loan details for each company
-const calculateLoanDetails = (company) => {
+const calculateLoanDetails = (company, loanAmount, terms) => {
 if (!loanAmount || !terms) return null;
 
 const amount = parseFloat(loanAmount);
 const termCount = parseInt(terms);
 
-if (company.interestType === 'Straight') {
-const interestRate = company.id === 1 ? 0.075 : 0.10; // 7.5% for OCS, 10% for PNJ
+if (company.interestType === 'STRAIGHT') {
+const interestRate = company.interestRate;
 const interest = amount * interestRate * termCount;
 const totalPayment = amount + interest;
 const monthlyPayment = totalPayment / termCount;
@@ -263,7 +208,7 @@ netRelease,
 interestRate: interestRate * 100
 };
 } else { // Diminishing interest
-const monthlyRate = 0.05; // 5% monthly
+const monthlyRate = company.interestRate;
 let remainingPrincipal = amount;
 let totalInterest = 0;
 const monthlyPrincipal = amount / termCount;
@@ -352,39 +297,46 @@ setCurrentRequirement(null);
 
 // Document upload handler for a specific requirement
 const handleDocumentUpload = async (requirement) => {
-try {
-// Request permission first
-if (Platform.OS !== 'web') {
-const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-if (status !== 'granted') {
-alert('Sorry, we need camera roll permissions to make this work!');
-return;
-}
-}
+  try {
+    // Request permission first
+    if (Platform.OS !== 'web') {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
-const result = await DocumentPicker.getDocumentAsync({
-type: '*/*',
-multiple: true,
-copyToCacheDirectory: true
-});
+      if (status !== 'granted') {
+        alert('Sorry, we need camera roll permissions to make this work!');
+        return;
+      }
+    }
 
-if (!result.canceled && result.assets) {
-const newDocuments = result.assets.map(asset => ({
-name: asset.name || `document_${Date.now()}`,
-uri: asset.uri,
-type: asset.mimeType,
-class: requirementClass[requirement] || '',
-subclass: requirementSubclass[requirement] || '',
-requirement: requirement,
-uploadDate: new Date().toLocaleDateString()
-}));
+    const result = await DocumentPicker.getDocumentAsync({
+      type: '*/*',
+      multiple: true,
+      copyToCacheDirectory: true
+      }
+    );
+  
+    if (!result.canceled && result.assets) {
+      const newDocuments = result.assets.map(async (asset) => ({
+        name: asset.name || `document_${Date.now()}`,
 
-setDocuments(prev => [...prev, ...newDocuments]);
-}
-} catch (err) {
-console.error('Document picker error:', err);
-Alert.alert('Error', 'Failed to pick document. Please try again.');
-}
+        // Convert to base64, this is important to be sent to the server
+        uri: await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 }), 
+        type: asset.mimeType,
+        class: requirementClass[requirement] || '',
+        subclass: requirementSubclass[requirement] || '',
+        requirement: requirement,
+        uploadDate: new Date().toLocaleDateString()
+      }));
+
+      const resolvedDocuments = await Promise.all(newDocuments);
+
+      setDocuments(prev => [...prev, ...resolvedDocuments]);
+    }
+
+  } catch (err) {
+    console.error('Document picker error:', err);
+    Alert.alert('Error', 'Failed to pick document. Please try again.');
+  }
 };
 
 // Camera capture handler for a specific requirement
@@ -402,20 +354,24 @@ aspect: [4, 3],
 quality: 0.8,
 });
 
-if (!result.canceled) {
-const newDocument = {
-name: `photo_${Date.now()}.jpg`,
-uri: result.assets[0].uri,
-type: 'image/jpeg',
-class: requirementClass[requirement] || '',
-subclass: requirementSubclass[requirement] || '',
-requirement: requirement,
-uploadDate: new Date().toLocaleDateString(),
-isImage: true
-};
+  if (!result.canceled) {
+    // Convert to base64, this is important to be sent to the server
+    const base64Uri = await FileSystem.readAsStringAsync(result.assets[0].uri, { encoding: FileSystem.EncodingType.Base64 })
 
-setDocuments(prev => [...prev, newDocument]);
-}
+    const newDocument = {
+      name: `photo_${Date.now()}.jpg`,      
+      uri: base64Uri, 
+      type: 'image/jpeg',
+      class: requirementClass[requirement] || '',
+      subclass: requirementSubclass[requirement] || '',
+      requirement: requirement,
+      uploadDate: new Date().toLocaleDateString(),
+      isImage: true
+    };
+
+    setDocuments(prev => [...prev, newDocument]);
+  };
+
 } catch (err) {
 console.error('Camera error:', err);
 Alert.alert('Error', 'Failed to capture image. Please try again.');
@@ -466,61 +422,89 @@ Uploaded: ${document.uploadDate}`,
 };
 
 // Submit application
-const submitApplication = () => {
-// Validate all required fields
-const amountValid = validateField('loanAmount', loanAmount);
-const termsValid = validateField('terms', terms);
-const incomeValid = validateField('monthlyIncome', monthlyIncome);
-const purposeValid = validateField('purpose', purpose);
+const submitApplication = async () => {
+  // Validate all required fields
+  const amountValid = validateField('loanAmount', loanAmount);
+  const termsValid = validateField('terms', terms);
+  const incomeValid = validateField('monthlyIncome', monthlyIncome);
+  const purposeValid = validateField('purpose', purpose);
 
-if (!amountValid || !termsValid || !incomeValid || !purposeValid) {
-Alert.alert('Validation Error', 'Please fill all required fields correctly before submitting.');
-return;
-}
+  if (!amountValid || !termsValid || !incomeValid || !purposeValid) {
+    Alert.alert('Validation Error', 'Please fill all required fields correctly before submitting.');
+    return;
+  }
 
-// Check if all requirements have at least one document
-const selectedCompanyData = companies.find(c => c.id === selectedCompany);
-const allRequirementsFulfilled = selectedCompanyData.requirements.every(req =>
-documents.some(doc => doc.requirement === req)
-);
+  // Check if all requirements have at least one document
+  const selectedCompanyData = companies.find(c => c.id === selectedCompany);
+  const allRequirementsFulfilled = selectedCompanyData.requirements.every(req =>
+    documents.some(doc => doc.requirement === req)
+  );
 
-if (!allRequirementsFulfilled) {
-Alert.alert('Documents Required', 'Please upload at least one document for each requirement before submitting.');
-return;
-}
+  if (!allRequirementsFulfilled) {
+    Alert.alert('Documents Required', 'Please upload at least one document for each requirement before submitting.');
+    return;
+  }
 
-const loanDetails = calculateLoanDetails(selectedCompanyData);
+  // Prepare data for submission
+  const data = {
+    type: loanType === 'new' ? 'REGULAR' : 'BONUS',
+    amount: parseFloat(loanAmount),
+    terms: parseFloat(terms),
+    monthlyIncome: parseFloat(monthlyIncome),
+    purpose,
+    isAtmCard: collateral.atm,
+    isCheck: collateral.check,
+    isPassBook: collateral.passbook,
+    other: collateral.other ? otherCollateralText : "N/A",
+    selectedCompany: selectedCompanyData.name,
+    documents,
+  }
 
-const applicationData = {
-id: 'L-' + Math.random().toString(36).substr(2, 8).toUpperCase(),
-type: loanType === 'new' ? 'New Loan' : 'Bonus Loan',
-amount: `\u20b1${parseFloat(loanAmount).toLocaleString()}`,
-terms: `${terms} months`,
-monthlyPayment: `\u20b1${loanDetails.monthlyPayment.toFixed(2)}`,
-lender: selectedCompanyData.name,
-status: 'Processing',
-date: new Date().toLocaleDateString(),
-timestamp: new Date().toISOString(),
-purpose: purpose,
-monthlyIncome: `\u20b1${parseFloat(monthlyIncome).toLocaleString()}`,
-collateral: collateral,
-documents: documents.length,
-// Additional details for the receipt
-loanAmount: parseFloat(loanAmount),
-interestRate: loanDetails.interestRate,
-interestType: selectedCompanyData.interestType,
-totalInterest: loanDetails.interest,
-processingFee: selectedCompanyData.processingFee,
-totalPayment: loanDetails.totalPayment,
-netRelease: loanDetails.netRelease
-};
+  const { success, message, companyDetails, loan, numberOfDocs } = await SUBMIT_LOAN_APPLICATION(data);
 
-// Show bubble notification first
-Alert.alert(
-'Application Submitted',
-'Your loan application has been submitted successfully!',
-[{ text: 'OK', onPress: () => navigation.navigate('PayNow', { loanApplication: applicationData }) }]
-);
+  if (!success) {
+    Alert.alert('Error', message);
+    return;
+  }
+
+  const loanDetails = calculateLoanDetails(companyDetails, loan.amount, loan.terms);
+
+  const applicationData = {
+    id: loan.id,
+    type: loan.type,
+    amount: convertToPHP(loan.amount),
+    terms: `${loan.terms} months`,
+    monthlyPayment: `${convertToPHP(loanDetails.monthlyPayment)}`,
+    lender: companyDetails.name,
+    status: loan.status,
+    date: loan.createdAt,
+    timestamp: loan.createdAt,
+    purpose: loan.purpose,
+    monthlyIncome: convertToPHP(loan.monthlyIncome),
+    collateral: {
+      atm: loan.isAtmCard,
+      check: loan.isCheck,
+      passbook: loan.isPassBook,
+      other: loan.other
+    },
+    documents: numberOfDocs,
+
+    // Additional details for the receipt
+    loanAmount: loan.amount,
+    interestRate: loanDetails.interestRate,
+    interestType: companyDetails.interestType,
+    totalInterest: loanDetails.interest,
+    processingFee: companyDetails.processingFee,
+    totalPayment: loanDetails.totalPayment,
+    netRelease: loanDetails.netRelease
+  };
+
+  // Show bubble notification first
+  Alert.alert(
+    'Application Submitted',
+    'Your loan application has been submitted successfully!',
+    [{ text: 'OK', onPress: () => navigation.navigate('PayNow', { loanApplication: applicationData }) }]
+  );
 };
 
 // Contact lender
@@ -543,6 +527,19 @@ inputRange: [0, 100],
 outputRange: ['0%', '100%'],
 extrapolate: 'clamp'
 });
+
+// Fetch lending companies on load
+useEffect(() => {
+  const fetchLendingCompanies = async () => {
+    const { success, companies, message } = await GET_LENDING_COMPANIES();
+
+    if (success) {
+      setCompanies(companies);
+    }
+  };
+
+  fetchLendingCompanies();
+}, []);
 
 return (
 <View style={styles.progressContainer}>
@@ -630,146 +627,146 @@ disabled={!loanType}
 
 // Render Loan Details step
 const renderLoanDetails = () => (
-<Animated.View style={[styles.stepContainer, { opacity: fadeAnim }]}>
-<Text style={styles.stepHeader}>Loan Details</Text>
-<Text style={styles.stepSubheader}>Provide information about your loan request</Text>
+  <Animated.View style={[styles.stepContainer, { opacity: fadeAnim }]}>
+    <Text style={styles.stepHeader}>Loan Details</Text>
+    <Text style={styles.stepSubheader}>Provide information about your loan request</Text>
 
-<View style={styles.formGroup}>
-<Text style={styles.label}>Loan Amount (\u20b1)</Text>
-<View style={[styles.inputContainer, errors.loanAmount && touched.loanAmount && styles.inputError]}>
-<TextInput
-style={styles.input}
-placeholder="Enter amount (e.g., 10000)"
-keyboardType="numeric"
-value={loanAmount}
-onChangeText={setLoanAmount}
-onBlur={() => handleBlur('loanAmount', loanAmount)}
-/>
-{errors.loanAmount && touched.loanAmount && (
-<Text style={styles.errorText}>{errors.loanAmount}</Text>
-)}
-</View>
-</View>
+    <View style={styles.formGroup}>
+      <Text style={styles.label}>Loan Amount ({"\u20b1"})</Text>
+      <View style={[styles.inputContainer, errors.loanAmount && touched.loanAmount && styles.inputError]}>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter amount (e.g., 10000)"
+          keyboardType="numeric"
+          value={loanAmount}
+          onChangeText={setLoanAmount}
+          onBlur={() => handleBlur('loanAmount', loanAmount)}
+        />
+        {errors.loanAmount && touched.loanAmount && (
+          <Text style={styles.errorText}>{errors.loanAmount}</Text>
+        )}
+      </View>
+    </View>
 
-<View style={styles.formGroup}>
-<Text style={styles.label}>Loan Term (months)</Text>
-<View style={[styles.inputContainer, errors.terms && touched.terms && styles.inputError]}>
-<TextInput
-style={styles.input}
-placeholder="Enter term in months (e.g., 2)"
-keyboardType="numeric"
-value={terms}
-onChangeText={setTerms}
-onBlur={() => handleBlur('terms', terms)}
-/>
-{errors.terms && touched.terms && (
-<Text style={styles.errorText}>{errors.terms}</Text>
-)}
-</View>
-</View>
+    <View style={styles.formGroup}>
+      <Text style={styles.label}>Loan Term (months)</Text>
+      <View style={[styles.inputContainer, errors.terms && touched.terms && styles.inputError]}>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter term in months (e.g., 2)"
+          keyboardType="numeric"
+          value={terms}
+          onChangeText={setTerms}
+          onBlur={() => handleBlur('terms', terms)}
+        />
+        {errors.terms && touched.terms && (
+          <Text style={styles.errorText}>{errors.terms}</Text>
+        )}
+      </View>
+    </View>
 
-{loanAmount && terms && (
-<View style={styles.calculationBox}>
-<Text style={styles.calculationTitle}>Estimated Monthly Payment:</Text>
-<Text style={styles.calculationAmount}>
-\u20b1{calculateEstimatedPayment().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-</Text>
-<Text style={styles.calculationNote}>This is an estimate. Final amount may vary.</Text>
-</View>
-)}
+    {loanAmount && terms && (
+      <View style={styles.calculationBox}>
+        <Text style={styles.calculationTitle}>Estimated Monthly Payment:</Text>
+        <Text style={styles.calculationAmount}>
+        {"\u20b1"}{calculateEstimatedPayment().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </Text>
+        <Text style={styles.calculationNote}>This is an estimate. Final amount may vary.</Text>
+      </View>
+    )}
 
-<View style={styles.formGroup}>
-<Text style={styles.label}>Monthly Income (\u20b1)</Text>
-<View style={[styles.inputContainer, errors.monthlyIncome && touched.monthlyIncome && styles.inputError]}>
-<TextInput
-style={styles.input}
-placeholder="Enter your monthly income"
-keyboardType="numeric"
-value={monthlyIncome}
-onChangeText={setMonthlyIncome}
-onBlur={() => handleBlur('monthlyIncome', monthlyIncome)}
-/>
-{errors.monthlyIncome && touched.monthlyIncome && (
-<Text style={styles.errorText}>{errors.monthlyIncome}</Text>
-)}
-</View>
-</View>
+    <View style={styles.formGroup}>
+      <Text style={styles.label}>Monthly Income ({"\u20b1"})</Text>
+        <View style={[styles.inputContainer, errors.monthlyIncome && touched.monthlyIncome && styles.inputError]}>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter your monthly income"
+          keyboardType="numeric"
+          value={monthlyIncome}
+          onChangeText={setMonthlyIncome}
+          onBlur={() => handleBlur('monthlyIncome', monthlyIncome)}
+        />
+        {errors.monthlyIncome && touched.monthlyIncome && (
+        <Text style={styles.errorText}>{errors.monthlyIncome}</Text>
+        )}
+      </View>
+    </View>
 
-<View style={styles.formGroup}>
-<Text style={styles.label}>Loan Purpose</Text>
-<View style={[styles.inputContainer, errors.purpose && touched.purpose && styles.inputError]}>
-<ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.purposeScroll}>
-{loanPurposes.map((item, index) => (
-<TouchableOpacity
-key={index}
-style={[styles.purposeChip, purpose === item && styles.purposeChipSelected]}
-onPress={() => {
-setPurpose(item);
-validateField('purpose', item);
-}}
->
-<Text style={[styles.purposeChipText, purpose === item && styles.purposeChipTextSelected]}>
-{item}
-</Text>
-</TouchableOpacity>
-))}
-</ScrollView>
-{errors.purpose && touched.purpose && (
-<Text style={styles.errorText}>{errors.purpose}</Text>
-)}
-</View>
-</View>
+    <View style={styles.formGroup}>
+      <Text style={styles.label}>Loan Purpose</Text>
+      <View style={[styles.inputContainer, errors.purpose && touched.purpose && styles.inputError]}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.purposeScroll}>
+          {loanPurposes.map((item, index) => (
+            <TouchableOpacity
+              key={index}
+              style={[styles.purposeChip, purpose === item && styles.purposeChipSelected]}
+              onPress={() => {
+              setPurpose(item);
+              validateField('purpose', item);
+              }}
+            >
+              <Text style={[styles.purposeChipText, purpose === item && styles.purposeChipTextSelected]}>
+                {item}
+              </Text>
+            </TouchableOpacity>
+            ))}
+        </ScrollView>
+        {errors.purpose && touched.purpose && (
+          <Text style={styles.errorText}>{errors.purpose}</Text>
+        )}
+      </View>
+    </View>
 
-<View style={styles.formGroup}>
-<Text style={styles.label}>Available Collateral</Text>
-<View style={styles.checkboxContainer}>
-{Object.keys(collateral).map(type => (
-<TouchableOpacity
-key={type}
-style={styles.checkboxWrapper}
-onPress={() => handleCollateralChange(type)}
->
-<View style={[styles.checkbox, collateral[type] && styles.checkboxSelected]}>
-{collateral[type] && <Ionicons name="checkmark" size={16} color="white" />}
-</View>
-<Text style={styles.checkboxLabel}>
-{type.charAt(0).toUpperCase() + type.slice(1)}
-{type === 'atm' && ' Card'}
-</Text>
-</TouchableOpacity>
-))}
-{collateral.other && (
-<TextInput
-style={[styles.input, { marginTop: 10 }]}
-placeholder="Specify other collateral"
-value={otherCollateralText}
-onChangeText={setOtherCollateralText}
-/>
-)}
-</View>
-</View>
+    <View style={styles.formGroup}>
+      <Text style={styles.label}>Available Collateral</Text>
+      <View style={styles.checkboxContainer}>
+        {Object.keys(collateral).map(type => (
+          <TouchableOpacity
+            key={type}
+            style={styles.checkboxWrapper}
+            onPress={() => handleCollateralChange(type)}
+            >
+            <View style={[styles.checkbox, collateral[type] && styles.checkboxSelected]}>
+              {collateral[type] && <Ionicons name="checkmark" size={16} color="white" />}
+            </View>
+            <Text style={styles.checkboxLabel}>
+              {type.charAt(0).toUpperCase() + type.slice(1)}
+              {type === 'atm' && ' Card'}
+            </Text>
+          </TouchableOpacity>
+          ))}
+          {collateral.other && (
+          <TextInput
+            style={[styles.input, { marginTop: 10 }]}
+            placeholder="Specify other collateral"
+            value={otherCollateralText}
+            onChangeText={setOtherCollateralText}
+          />
+        )}
+      </View>
+    </View>
 
-<View style={styles.stepNavigation}>
-<TouchableOpacity
-style={styles.backButton}
-onPress={() => setCurrentStep(0)}
->
-<Ionicons name="arrow-back" size={18} color="#333" />
-<Text style={styles.backButtonText}>Back</Text>
-</TouchableOpacity>
+    <View style={styles.stepNavigation}>
+      <TouchableOpacity
+        style={styles.backButton}
+        onPress={() => setCurrentStep(0)}
+      >
+        <Ionicons name="arrow-back" size={18} color="#333" />
+        <Text style={styles.backButtonText}>Back</Text>
+      </TouchableOpacity>
 
-<TouchableOpacity
-style={[styles.nextButton, (!loanAmount || !terms || !monthlyIncome || !purpose) && styles.disabledButton]}
-onPress={() => setCurrentStep(2)}
-disabled={!loanAmount || !terms || !monthlyIncome || !purpose}
->
-<View style={[styles.gradientButton, (!loanAmount || !terms || !monthlyIncome || !purpose) && styles.disabledButton]}>
-<Text style={styles.nextButtonText}>Next: Select Lender</Text>
-<Ionicons name="arrow-forward" size={20} color="white" style={{ marginLeft: 5 }} />
-</View>
-</TouchableOpacity>
-</View>
-</Animated.View>
+      <TouchableOpacity
+        style={[styles.nextButton, (!loanAmount || !terms || !monthlyIncome || !purpose) && styles.disabledButton]}
+        onPress={() => setCurrentStep(2)}
+        disabled={!loanAmount || !terms || !monthlyIncome || !purpose}
+      >
+        <View style={[styles.gradientButton, (!loanAmount || !terms || !monthlyIncome || !purpose) && styles.disabledButton]}>
+          <Text style={styles.nextButtonText}>Next: Select Lender</Text>
+          <Ionicons name="arrow-forward" size={20} color="white" style={{ marginLeft: 5 }} />
+        </View>
+      </TouchableOpacity>
+    </View>
+  </Animated.View>
 );
 
 // Render Lending Company selection
@@ -780,8 +777,8 @@ const renderLendingCompanies = () => (
 
 <View style={styles.divider} />
 
-{companies.map(company => {
-const loanDetails = calculateLoanDetails(company);
+{companies?.map(company => {
+const loanDetails = calculateLoanDetails(company, loanAmount, terms);
 return (
 <View key={company.id} style={styles.companyCard}>
 <View style={styles.companyHeader}>
@@ -790,7 +787,7 @@ return (
 <Text style={styles.companyName}>{company.name}</Text>
 <View style={styles.ratingContainer}>
 <Ionicons name="star" size={14} color="#FFD700" />
-<Text style={styles.ratingText}>{company.rating} ({company.reviews} reviews)</Text>
+<Text style={styles.ratingText}>{company.rating * 100} ({company.reviews} reviews)</Text>
 </View>
 </View>
 <TouchableOpacity
@@ -805,7 +802,7 @@ onPress={() => showCompanyInfo(company)}
 <View style={styles.detailRow}>
 <Ionicons name="pricetag-outline" size={16} color="#666" />
 <Text style={styles.detailText}>
-Interest: <Text style={styles.detailHighlight}>{company.interestRate}</Text>
+Interest: <Text style={styles.detailHighlight}>{company.interestRate * 100}%</Text>
 </Text>
 </View>
 <View style={styles.detailRow}>
@@ -827,7 +824,7 @@ Processing: <Text style={styles.detailHighlight}>{company.processingTime}</Text>
 <Text style={styles.loanCalculationTitle}>Loan Breakdown</Text>
 <View style={styles.loanCalculationRow}>
 <Text>Loan Amount:</Text>
-<Text>\u20b1{parseFloat(loanAmount).toLocaleString()}</Text>
+<Text>{convertToPHP(loanAmount)}</Text>
 </View>
 <View style={styles.loanCalculationRow}>
 <Text>Terms:</Text>
@@ -835,15 +832,15 @@ Processing: <Text style={styles.detailHighlight}>{company.processingTime}</Text>
 </View>
 <View style={styles.loanCalculationRow}>
 <Text>Interest ({loanDetails.interestRate.toFixed(1)}%):</Text>
-<Text>\u20b1{loanDetails.interest.toFixed(2)}</Text>
+<Text>{convertToPHP(loanDetails.interest)}</Text>
 </View>
 <View style={styles.loanCalculationRow}>
 <Text>Monthly Payment:</Text>
-<Text>\u20b1{loanDetails.monthlyPayment.toFixed(2)}</Text>
+<Text>{convertToPHP(loanDetails.monthlyPayment)}</Text>
 </View>
 <View style={[styles.loanCalculationRow, styles.netReleaseRow]}>
 <Text>Net Release:</Text>
-<Text style={styles.netReleaseText}>\u20b1{loanDetails.netRelease.toFixed(2)}</Text>
+<Text style={styles.netReleaseText}>{convertToPHP(loanDetails.netRelease)}</Text>
 </View>
 </View>
 )}
@@ -901,7 +898,7 @@ onRequestClose={() => setModalVisible(false)}
 <Text style={styles.modalTitle}>{selectedCompanyInfo.name}</Text>
 <View style={styles.ratingContainer}>
 <Ionicons name="star" size={14} color="#FFD700" />
-<Text style={styles.ratingText}>{selectedCompanyInfo.rating} ({selectedCompanyInfo.reviews} reviews)</Text>
+<Text style={styles.ratingText}>{selectedCompanyInfo.rating * 100} ({selectedCompanyInfo.reviews} reviews)</Text>
 </View>
 </View>
 <TouchableOpacity onPress={() => setModalVisible(false)}>
@@ -920,7 +917,7 @@ onRequestClose={() => setModalVisible(false)}
 </View>
 <View style={styles.modalDetailRow}>
 <Ionicons name="cash-outline" size={16} color="#8B5CF6" />
-<Text style={styles.modalDetailText}>Interest Rate: {selectedCompanyInfo.interestRate}</Text>
+<Text style={styles.modalDetailText}>Interest Rate: {selectedCompanyInfo.interestRate * 100}%</Text>
 </View>
 <View style={styles.modalDetailRow}>
 <Ionicons name="time-outline" size={16} color="#8B5CF6" />
@@ -928,13 +925,13 @@ onRequestClose={() => setModalVisible(false)}
 </View>
 <View style={styles.modalDetailRow}>
 <Ionicons name="wallet-outline" size={16} color="#8B5CF6" />
-<Text style={styles.modalDetailText}>Processing Fee: \u20b1{selectedCompanyInfo.processingFee}</Text>
+<Text style={styles.modalDetailText}>Processing Fee: {convertToPHP(selectedCompanyInfo.processingFee)}</Text>
 </View>
 
 <Text style={styles.modalSectionTitle}>Requirements:</Text>
 {selectedCompanyInfo.requirements.map((req, index) => (
 <View key={index} style={styles.modalListItem}>
-<Text style={styles.modalBullet}>\u2022</Text>
+<Text style={styles.modalBullet}>{"\u2022"}</Text>
 <Text style={styles.modalListItemText}>{req}</Text>
 </View>
 ))}
@@ -954,7 +951,7 @@ onRequestClose={() => setModalVisible(false)}
 <Text style={styles.modalSectionTitle}>Special Requirements:</Text>
 <View style={styles.modalListItem}>
 <Ionicons name="business-outline" size={16} color="#8B5CF6" />
-<Text style={styles.modalListItemText}>Physical visitation required</Text>
+<Text style={styles.modalListItemText}>   Physical visitation required</Text>
 </View>
 </React.Fragment>
 )}
@@ -1112,7 +1109,7 @@ onPress={() => viewDocument(doc)}
 
 <View style={styles.reviewItem}>
 <Text style={styles.reviewLabel}>Loan Amount:</Text>
-<Text style={styles.reviewValue}>\u20b1{parseFloat(loanAmount).toLocaleString()}</Text>
+<Text style={styles.reviewValue}>{convertToPHP(loanAmount)}</Text>
 </View>
 
 <View style={styles.reviewItem}>
@@ -1122,7 +1119,7 @@ onPress={() => viewDocument(doc)}
 
 <View style={styles.reviewItem}>
 <Text style={styles.reviewLabel}>Monthly Income:</Text>
-<Text style={styles.reviewValue}>\u20b1{parseFloat(monthlyIncome).toLocaleString()}</Text>
+<Text style={styles.reviewValue}>{convertToPHP(monthlyIncome)}</Text>
 </View>
 
 <View style={styles.reviewItem}>

@@ -54,7 +54,7 @@ const PayNowScreen = ({ navigation, route }) => {
 
   // Function to calculate billing details from loan application
   const calculateBillingDetails = (application) => {
-    const isProcessingStatus = application.status === 'Processing' || application.status === 'Pending';
+    const isProcessingStatus = application.status === 'PROCESSING';
 
     // If loan is still processing, show minimal information
     if (isProcessingStatus) {
@@ -81,7 +81,7 @@ const PayNowScreen = ({ navigation, route }) => {
         interestType: application.interestType || 'TBD',
         totalInterest: application.totalInterest || 0,
         processingFee: application.processingFee || 0,
-        monthlyPayment: parseFloat(application.monthlyPayment?.replace('\u20b1', '').replace(',', '')) || 0,
+        monthlyPayment: application.monthlyPayment || 0,
         totalPayment: application.totalPayment || 0,
         netRelease: application.netRelease || 0
       };
