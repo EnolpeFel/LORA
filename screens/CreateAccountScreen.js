@@ -306,7 +306,7 @@ const CreateAccountScreen = ({ navigation }) => {
       lname: lastName,
       suffix: suffix !== "" ? suffix : null,
       birthdate: new Date(birthdateISO),
-      gender: gender !== "" ? gender : null,
+      gender: gender !== "" ? gender.toUpperCase() : null,
       nationality: nationality !== "" ? nationality : null,
       country,
       province,
