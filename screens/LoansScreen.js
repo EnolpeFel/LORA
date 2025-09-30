@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { GET_LOANS_DATA } from "../actions/loans.action";
 
 // Mock data for loan history
 const LoanService = {
@@ -126,8 +127,16 @@ const MyLoansScreen = ({ navigation }) => {
 
   const fetchLoans = async () => {
     try {
-      const loanData = await LoanService.getLoans();
-      setLoans(loanData);
+      const { success, message, loans } = await GET_LOANS_DATA();
+
+      if (!success) {
+        throw new Error(message);
+      }
+
+      // Mock loans data
+      // const loans = await LoanService.getLoans();
+
+      setLoans(loans);
     } catch (error) {
       Alert.alert('Error', 'Failed to fetch loans. Please try again.');
       console.error(error);
@@ -199,7 +208,7 @@ const MyLoansScreen = ({ navigation }) => {
         </Text>
       </View>
       
-      <Text style={styles.loanAmount}>PHP {loan.amount}</Text>
+      <Text style={styles.loanAmount}>PHP {parseFloat(loan.amount).toLocaleString({ style: 'currency' })}</Text>
       
       <View style={styles.loanDetails}>
         <View style={styles.detailItem}>
@@ -234,13 +243,13 @@ const MyLoansScreen = ({ navigation }) => {
         <View style={styles.detailItem}>
           <Text style={styles.detailLabel}>Remaining Balance</Text>
           <Text style={styles.detailValue}>
-            {loan.remainingBalance === 'N/A' ? 'N/A' : `PHP ${loan.remainingBalance}`}
+            {loan.remainingBalance === 'N/A' ? 'N/A' : `PHP ${(parseFloat(loan.remainingBalance)).toLocaleString({ style: "currency" })}`}
           </Text>
         </View>
         <View style={styles.detailItem}>
           <Text style={styles.detailLabel}>Next Payment</Text>
           <Text style={styles.detailValue}>
-            {loan.nextPaymentAmount === 'TBD' ? 'TBD' : `PHP ${loan.nextPaymentAmount}`}
+            {loan.nextPaymentAmount === 'TBD' ? 'TBD' : `PHP ${parseFloat(loan.nextPaymentAmount).toLocaleString({ style: "currency" })}`}
           </Text>
         </View>
       </View>
