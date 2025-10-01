@@ -257,17 +257,17 @@ const MyLoansScreen = ({ navigation }) => {
       <TouchableOpacity 
         style={[
           styles.actionButton,
-          loan.status === 'Active' ? styles.payNowButton : 
-          loan.status === 'Processing' ? styles.viewButton : styles.viewButton
+          loan.status.toLowerCase() === 'active' ? styles.payNowButton : 
+          loan.status.toLowerCase() === 'processing' ? styles.viewButton : styles.viewButton
         ]}
         onPress={() => handleLoanPress(loan)}
       >
         <Text style={[
           styles.actionButtonText,
-          loan.status === 'Active' ? styles.payNowButtonText : styles.viewButtonText
+          loan.status.toLowerCase() === 'active' ? styles.payNowButtonText : styles.viewButtonText
         ]}>
-          {loan.status === 'Active' ? 'Pay Now' : 
-           loan.status === 'Processing' ? 'View Details' : 'View Receipt'}
+          {loan.status.toLowerCase() === 'active' ? 'Pay Now' : 
+           loan.status.toLowerCase() === 'processing' ? 'View Details' : 'View Receipt'}
         </Text>
       </TouchableOpacity>
     </TouchableOpacity>
