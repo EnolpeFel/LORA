@@ -98,11 +98,11 @@ const PayNowScreen = ({ navigation, route }) => {
       monthlyIncome: application.monthlyIncome || 'N/A',
       collateral: application.collateral || 'N/A',
       totalUsedCreditLimit: application.loanAmount,
-      unpaidCharges: application.loanAmount,
+      unpaidCharges: parseFloat(application.loanAmount),
       interestDue: application.totalInterest,
       penalties: 0.00,
       totalAmountDue: application.totalPayment,
-      monthlyPayment: parseFloat(application.monthlyPayment?.replace('\u20b1', '').replace(',', '')),
+      monthlyPayment: parseFloat(application.monthlyPayment),
       netRelease: application.netRelease,
       dueDate: application.dueDate || new Date().toLocaleDateString(),
       isProcessing: false,
@@ -112,7 +112,7 @@ const PayNowScreen = ({ navigation, route }) => {
       interestRate: application.interestRate,
       interestType: application.interestType,
       totalInterest: application.totalInterest,
-      processingFee: application.processingFee,
+      processingFee: parseFloat(application.processingFee),
       totalPayment: application.totalPayment
     };
   };
