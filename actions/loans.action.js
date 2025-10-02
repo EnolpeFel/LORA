@@ -1,6 +1,6 @@
 import client from "../lib/apolloClient";
 import { SUBMIT_LOAN_APPLICATION as SUBMIT_LOAN_APPLICATION_MUTATE } from "../graphql/mutations/loanApplications";
-import { GET_LOANS_DATA_QUERY } from "../graphql/queries/fetchLoans";
+import { GET_LOANS_DATA_QUERY, GET_LOAN_TRANSACTIONS_QUERY } from "../graphql/queries/fetchLoans";
 import { getToken } from "../lib/cookies";
 
 const SUBMIT_LOAN_APPLICATION = async (loanData) => {
@@ -79,4 +79,41 @@ const GET_LOANS_DATA = async () => {
   };
 };
 
-export { SUBMIT_LOAN_APPLICATION, GET_LOANS_DATA };
+const GET_LOAN_TRANSACTIONS = async () => {
+  try {
+    const token = await getToken();
+
+    const { data } = await client.query({
+      query: GET_LOAN_TRANSACTIONS_QUERY,
+      fetchPolicy: 'no-cache',
+      context: {
+        headers: {
+          Authorization: token
+        }
+      }
+    });
+
+    const { success, message, loanTransactions } = data.getLoanTransactions;
+
+    if(!success) {
+      return {
+        success: false,
+        message
+      }
+    };
+
+    return {
+      success,
+      message,
+      loanTransactions
+    };
+
+  } catch (err) {
+    return {
+      success: false,
+      message: err.message
+    };
+  }
+};
+
+export { SUBMIT_LOAN_APPLICATION, GET_LOANS_DATA, GET_LOAN_TRANSACTIONS };

@@ -1,16 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Modal, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
+import { GET_LOAN_TRANSACTIONS } from "../actions/loans.action";
 
 const TransactionsScreen = ({ navigation, route }) => {
   const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [receiptVisible, setReceiptVisible] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [transactionDatas, setTransactionDatas] = useState([]);
   
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      const { success, message, loanTransactions  } = await GET_LOAN_TRANSACTIONS();
+
+      if (success) {
+        setTransactionDatas(loanTransactions);
+      };
+    };
+
+    fetchTransactions();
+  }, [])
+
   // Use transactions from route params if available, otherwise use default data
   const transactions = route.params?.transactions || [
     {
@@ -511,7 +525,7 @@ const TransactionsScreen = ({ navigation, route }) => {
                       {selectedTransaction.processingFee && (
                         <View style={styles.receiptDetailRow}>
                           <Text style={styles.receiptDetailLabel}>Processing Fee:</Text>
-                          <Text style={styles.receiptDetailValueAmount}>₱{selectedTransaction.processingFee.toFixed(2)}</Text>
+                          <Text style={styles.receiptDetailValueAmount}>₱{selectedTransaction.processingFee}</Text>
                         </View>
                       )}
                       {selectedTransaction.netRelease && (
@@ -572,7 +586,7 @@ const TransactionsScreen = ({ navigation, route }) => {
       </View>
       
       <FlatList
-        data={transactions}
+        data={transactionDatas}
         renderItem={renderTransactionItem}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.transactionList}

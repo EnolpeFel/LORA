@@ -10,4 +10,14 @@ const GET_LOANS_DATA_QUERY = gql`
   }
 `
 
-export {  GET_LOANS_DATA_QUERY };
+const GET_LOAN_TRANSACTIONS_QUERY = gql`
+  query GetLoanTransactions{
+    getLoanTransactions{
+      success
+      message
+      loanTransactions
+    }
+  }
+`
+
+export {  GET_LOANS_DATA_QUERY, GET_LOAN_TRANSACTIONS_QUERY };

@@ -14,6 +14,7 @@
   import { SafeAreaView } from 'react-native-safe-area-context';
   import { MaterialIcons } from '@expo/vector-icons';
   import ProfileScreen from './ProfileScreen';
+import { GET_WALLET_BALANCE, WALLET_CASH_IN } from "../actions/wallets.action";
 
   const { width } = Dimensions.get('window');
 
@@ -27,8 +28,10 @@
     const [currentDateTime, setCurrentDateTime] = useState('');
     const [loanApplicationStatus, setLoanApplicationStatus] = useState(null);
     const [activeTab, setActiveTab] = useState('pending');
-    const [walletBalance, setWalletBalance] = useState(12500.75);
+    const [walletBalance, setWalletBalance] = useState(0);
     const [showWalletActions, setShowWalletActions] = useState(false);
+
+    const [toggleReload, setToggleReload] = useState(false);
     
     // Wallet feature modals
     const [showTransferModal, setShowTransferModal] = useState(false);
@@ -189,7 +192,7 @@
       Alert.alert('Success', `Php ${amount.toFixed(2)} transferred successfully via ${bankName}!`);
     };
 
-    const handleCashIn = () => {
+    const handleCashIn = async () => {
       const amount = parseFloat(cashInAmount);
       if (!amount || amount <= 0) {
         Alert.alert('Error', 'Please enter a valid amount');
@@ -200,11 +203,26 @@
         return;
       }
 
+      // Cash in process
+      /*
+        To do: change the selected cash in method to dynamic once the paymongo integration is done,
+        also make sure it matches to the types of the wallet cash in methods in the backend.
+
+        These are the types accepted in the backend (If you change this, change it in the backend too): 
+        GCASH, PAYMAYA, BANK_TRANSFER, OVER_THE_COUNTER, CREDIT_CARD, DEBIT_CARD
+      */ 
+      const { success, message } = await WALLET_CASH_IN(amount, "GCASH");
+
+      if (!success) {
+        Alert.alert('Error', message);
+        return;
+      }
+
+      // Reload wallet balance (This will trigger the useEffect to update the balance)
+      setToggleReload(prev => !prev);
+
       const method = cashInMethods.find(m => m.id === selectedCashInMethod);
       const totalAmount = amount - method.fee;
-      
-      // Process cash in
-      setWalletBalance(prev => prev + totalAmount);
       
       // Add to transaction history
       const newTransaction = {
@@ -370,6 +388,19 @@
         minute: '2-digit'
       });
     };
+
+    // Fetch wallet balance on render
+    useEffect(() => {
+      const fetchWalletBalance = async () => {
+        const { success, balance } = await GET_WALLET_BALANCE();
+
+        if (success) {
+          setWalletBalance(balance);
+        }
+      };
+
+      fetchWalletBalance();
+    }, [toggleReload])
 
     // Simple Profile Screen Component
     const ProfileScreen = ({ onBack, onLogout }) => {
