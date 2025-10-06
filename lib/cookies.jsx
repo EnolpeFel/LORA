@@ -13,4 +13,17 @@ const getToken = async () => {
   return token;
 }
 
-export { saveToken, getToken };
+// Retrieves the phone number from the token
+const getPhoneToken = async () => {
+  const phone = await SecureStore.getItemAsync('phone-token');
+  return phone;
+}
+
+// Saves the phone number as token to the secure store
+const savePhoneToken = async (token) => {
+ await SecureStore.setItemAsync('phone-token', token, {
+    keychainAccessible: SecureStore.WHEN_UNLOCKED, // iOS option
+  });
+}
+
+export { saveToken, getToken, getPhoneToken, savePhoneToken };

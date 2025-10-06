@@ -14,6 +14,7 @@ const VERIFY_MPIN = gql`
     verifyMPIN(phone: $phone, code: $code) {
       success
       message
+      token
     }
   }
 `

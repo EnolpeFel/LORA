@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
+import { WALLET_PAYMENT, GET_WALLET_BALANCE } from "../actions/wallets.action";
 
 const { width } = Dimensions.get('window');
 
@@ -20,7 +21,7 @@ const PayNowScreen = ({ navigation, route }) => {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [walletBalance, setWalletBalance] = useState(12500.75);
+  const [walletBalance, setWalletBalance] = useState(0);
   const [loanDetails, setLoanDetails] = useState(null);
   const [showReceiptDetails, setShowReceiptDetails] = useState(false);
   const [newTransaction, setNewTransaction] = useState(null);
@@ -54,7 +55,7 @@ const PayNowScreen = ({ navigation, route }) => {
 
   // Function to calculate billing details from loan application
   const calculateBillingDetails = (application) => {
-    const isProcessingStatus = application.status === 'Processing' || application.status === 'Pending';
+    const isProcessingStatus = application.status === 'PROCESSING';
 
     // If loan is still processing, show minimal information
     if (isProcessingStatus) {
@@ -81,7 +82,7 @@ const PayNowScreen = ({ navigation, route }) => {
         interestType: application.interestType || 'TBD',
         totalInterest: application.totalInterest || 0,
         processingFee: application.processingFee || 0,
-        monthlyPayment: parseFloat(application.monthlyPayment?.replace('\u20b1', '').replace(',', '')) || 0,
+        monthlyPayment: application.monthlyPayment || 0,
         totalPayment: application.totalPayment || 0,
         netRelease: application.netRelease || 0
       };
@@ -98,11 +99,11 @@ const PayNowScreen = ({ navigation, route }) => {
       monthlyIncome: application.monthlyIncome || 'N/A',
       collateral: application.collateral || 'N/A',
       totalUsedCreditLimit: application.loanAmount,
-      unpaidCharges: application.loanAmount,
+      unpaidCharges: parseFloat(application.loanAmount),
       interestDue: application.totalInterest,
       penalties: 0.00,
       totalAmountDue: application.totalPayment,
-      monthlyPayment: parseFloat(application.monthlyPayment?.replace('\u20b1', '').replace(',', '')),
+      monthlyPayment: parseFloat(application.monthlyPayment),
       netRelease: application.netRelease,
       dueDate: application.dueDate || new Date().toLocaleDateString(),
       isProcessing: false,
@@ -112,7 +113,7 @@ const PayNowScreen = ({ navigation, route }) => {
       interestRate: application.interestRate,
       interestType: application.interestType,
       totalInterest: application.totalInterest,
-      processingFee: application.processingFee,
+      processingFee: parseFloat(application.processingFee),
       totalPayment: application.totalPayment
     };
   };
@@ -167,52 +168,66 @@ const PayNowScreen = ({ navigation, route }) => {
     setShowPaymentModal(true);
   };
 
-  const processPayment = () => {
-    if (!selectedPaymentMethod || !loanDetails) {
+  const processPayment = async (paymentMethod) => {
+    if (!paymentMethod || !loanDetails ) {
       Alert.alert('Error', 'Payment method or loan details not available');
       return;
     }
 
     setIsProcessing(true);
 
-    setTimeout(() => {
-      setIsProcessing(false);
-      setShowPaymentModal(false);
+    // setTimeout(() => {
+    //   setIsProcessing(false);
+    //   setShowPaymentModal(false);
 
       // Create new transaction record
-      const transactionId = `TXN-${Date.now()}`;
-      const currentDate = new Date();
-      const newTransactionRecord = {
-        id: transactionId,
-        type: 'Payment',
-        amount: loanDetails.totalAmountDue.toFixed(2),
-        date: currentDate.toLocaleDateString('en-US', { 
-          month: 'short', 
-          day: 'numeric', 
-          year: 'numeric' 
-        }),
-        time: currentDate.toLocaleTimeString('en-US', { 
-          hour: 'numeric', 
-          minute: '2-digit', 
-          hour12: true 
-        }),
-        status: 'Completed',
-        loanId: loanDetails.applicationId,
-        transactionId: transactionId,
-        paymentMethod: selectedPaymentMethod.name,
-        lender: loanDetails.lender,
-        loanType: loanDetails.loanType
-      };
+      // const transactionId = `TXN-${Date.now()}`;
+      // const currentDate = new Date();
+      // const newTransactionRecord = {
+      //   id: transactionId,
+      //   type: 'Payment',
+      //   amount: loanDetails.totalAmountDue.toFixed(2),
+      //   date: currentDate.toLocaleDateString('en-US', { 
+      //     month: 'short', 
+      //     day: 'numeric', 
+      //     year: 'numeric' 
+      //   }),
+      //   time: currentDate.toLocaleTimeString('en-US', { 
+      //     hour: 'numeric', 
+      //     minute: '2-digit', 
+      //     hour12: true 
+      //   }),
+      //   status: 'Completed',
+      //   loanId: loanDetails.applicationId,
+      //   transactionId: transactionId,
+      //   paymentMethod: selectedPaymentMethod.name,
+      //   lender: loanDetails.lender,
+      //   loanType: loanDetails.loanType
+      // };
 
-      setNewTransaction(newTransactionRecord);
+      // setNewTransaction(newTransactionRecord);
 
       // If paying with wallet, deduct from balance
-      if (selectedPaymentMethod.id === 'wallet') {
-        setWalletBalance(prev => prev - loanDetails.totalAmountDue);
-      }
+      // if (selectedPaymentMethod.id === 'wallet') {
+      //   setWalletBalance(prev => prev - loanDetails.totalAmountDue);
+      // }
 
-      setShowConfirmationModal(true);
-    }, 2000);
+    //   setShowConfirmationModal(true);
+    // }, 2000);
+
+    const { message, success } = await WALLET_PAYMENT(loanDetails.applicationId);
+
+    if (!success) {
+      Alert.alert('Error', message);
+      setIsProcessing(false);
+      setShowPaymentModal(false);
+      return;
+    }
+
+    setIsProcessing(false);
+    setShowPaymentModal(false);
+
+    setShowConfirmationModal(true);
   };
 
   const goBackToDashboard = () => {
@@ -239,6 +254,21 @@ const PayNowScreen = ({ navigation, route }) => {
       transactions: updatedTransactions 
     });
   };
+
+  // Fetch wallet balance
+  useEffect(() => {
+    const fetchWalletBalance = async () => {
+      const { success, message, balance } = await GET_WALLET_BALANCE();
+
+      if (!success) {
+        Alert.alert('Error', message);
+        return;
+      }
+
+      setWalletBalance(balance);
+    };
+    fetchWalletBalance();
+  }, []);
 
   // Show loading while processing loan application data
   if (!loanDetails) {
@@ -283,13 +313,13 @@ const PayNowScreen = ({ navigation, route }) => {
               <Text style={styles.receiptTitle}>Loan Receipt</Text>
               <View style={styles.statusBadge}>
                 <MaterialIcons
-                  name={loanDetails.status === 'Approved' ? 'check-circle' : 'hourglass-empty'}
+                  name={loanDetails.status.toLowerCase() === 'completed' ? 'check-circle' : 'hourglass-empty'}
                   size={16}
-                  color={loanDetails.status === 'Approved' ? '#10B981' : '#F59E0B'}
+                  color={loanDetails.status.toLowerCase() === 'completed' ? '#10B981' : '#F59E0B'}
                 />
                 <Text style={[
                   styles.statusText,
-                  { color: loanDetails.status === 'Approved' ? '#10B981' : '#F59E0B' }
+                  { color: loanDetails.status.toLowerCase() === 'completed' ? '#10B981' : '#F59E0B' }
                 ]}>
                   {loanDetails.status}
                 </Text>
@@ -600,13 +630,13 @@ const PayNowScreen = ({ navigation, route }) => {
               setShowPaymentModal(true);
             }
           }}
-          disabled={false} // Remove disabled prop to allow press for alert
+          disabled={loanDetails.isProcessing || loanDetails.status === 'COMPLETED'} // Remove disabled prop to allow press for alert
         >
           <Text style={[
             styles.payButtonText,
-            loanDetails.isProcessing && styles.disabledButtonText
+            loanDetails.isProcessing || loanDetails.status === 'COMPLETED' ? styles.disabledButtonText : null
           ]}>
-            {loanDetails.isProcessing ? 'PAYMENT NOT AVAILABLE' : 'PAY FOR LOAN'}
+            {loanDetails.isProcessing || loanDetails.status === 'COMPLETED' ? 'PAYMENT NOT AVAILABLE' : 'PAY FOR LOAN'}
           </Text>
         </TouchableOpacity>
 
@@ -675,7 +705,9 @@ const PayNowScreen = ({ navigation, route }) => {
                           return;
                         }
                         setSelectedPaymentMethod(method);
-                        processPayment();
+
+                        // Must pass in method to processPayment otherwise it will be null
+                        processPayment(method);
                       }}
                     >
                       <View style={styles.paymentMethodLeft}>
