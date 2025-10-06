@@ -1333,9 +1333,10 @@ import { GET_LOAN_TRANSACTIONS, GET_CURRENT_LOAN_DATA, GET_LOANS_DATA } from "..
                 <TouchableOpacity 
                   style={styles.payNowButtonGrand}
                   onPress={() => {
-                    if (!currentLoanData) return;
+                    if (currentLoanData.status === "ACTIVE") {
+                      navigation.navigate('PayNow', { loanApplication: currentLoanData })
+                    };
 
-                    navigation.navigate('PayNow', { loanApplication: currentLoanData })
                   }}
                 >
                   <Text style={styles.payNowButtonTextGrand}>PAY NOW</Text>
