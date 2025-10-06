@@ -313,13 +313,13 @@ const PayNowScreen = ({ navigation, route }) => {
               <Text style={styles.receiptTitle}>Loan Receipt</Text>
               <View style={styles.statusBadge}>
                 <MaterialIcons
-                  name={loanDetails.status === 'Approved' ? 'check-circle' : 'hourglass-empty'}
+                  name={loanDetails.status.toLowerCase() === 'completed' ? 'check-circle' : 'hourglass-empty'}
                   size={16}
-                  color={loanDetails.status === 'Approved' ? '#10B981' : '#F59E0B'}
+                  color={loanDetails.status.toLowerCase() === 'completed' ? '#10B981' : '#F59E0B'}
                 />
                 <Text style={[
                   styles.statusText,
-                  { color: loanDetails.status === 'Approved' ? '#10B981' : '#F59E0B' }
+                  { color: loanDetails.status.toLowerCase() === 'completed' ? '#10B981' : '#F59E0B' }
                 ]}>
                   {loanDetails.status}
                 </Text>

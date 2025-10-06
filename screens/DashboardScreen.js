@@ -15,6 +15,7 @@
   import { MaterialIcons } from '@expo/vector-icons';
   import ProfileScreen from './ProfileScreen';
 import { GET_WALLET_BALANCE, WALLET_CASH_IN, GET_WALLET_TRANSACTIONS } from "../actions/wallets.action";
+import { GET_LOAN_TRANSACTIONS, GET_CURRENT_LOAN_DATA, GET_LOANS_DATA } from "../actions/loans.action";
 
   const { width } = Dimensions.get('window');
 
@@ -30,6 +31,9 @@ import { GET_WALLET_BALANCE, WALLET_CASH_IN, GET_WALLET_TRANSACTIONS } from "../
     const [activeTab, setActiveTab] = useState('pending');
     const [walletBalance, setWalletBalance] = useState(0);
     const [showWalletActions, setShowWalletActions] = useState(false);
+    const [recentLoanTransactions, setRecentLoanTransactions] = useState([]);
+    const [currentLoanData, setCurrentLoanData] = useState([]);
+    const [activeLoansData, setActiveLoansData] = useState([]);
 
     const [toggleReload, setToggleReload] = useState(false);
     
@@ -389,7 +393,7 @@ import { GET_WALLET_BALANCE, WALLET_CASH_IN, GET_WALLET_TRANSACTIONS } from "../
       });
     };
 
-    // Fetch wallet balance and wallet transactions on render
+    // Fetch wallet balance, wallet and loan transactions on render
     useEffect(() => {
       const fetchWalletBalance = async () => {
         const { success, balance } = await GET_WALLET_BALANCE();
@@ -407,9 +411,38 @@ import { GET_WALLET_BALANCE, WALLET_CASH_IN, GET_WALLET_TRANSACTIONS } from "../
         };
       };
 
+      const fetchRecentLoanTransactions = async () => {
+        const { success, message, loanTransactions  } = await GET_LOAN_TRANSACTIONS();
+  
+        if (success) {
+          setRecentLoanTransactions(loanTransactions);
+        };
+      };
+
+      const fetchCurrentLoanData = async () => {
+        const { success, message, currentLoan } = await GET_CURRENT_LOAN_DATA();
+
+        if (success) {
+          setCurrentLoanData(currentLoan);
+        };
+      };
+
+      const fetchActiveLoans = async () => {
+        const { success, message, loans } = await GET_LOANS_DATA();
+
+        const activeLoans = loans.filter((loan) => loan.status === "ACTIVE")
+
+        if (success) {
+          setActiveLoansData(activeLoans);
+        };
+      };
+      
+      fetchActiveLoans();
+      fetchCurrentLoanData();
+      fetchRecentLoanTransactions();
       fetchWalletTransactions();
       fetchWalletBalance();
-    }, [toggleReload])
+    }, [toggleReload, route.params])
 
     // Simple Profile Screen Component
     const ProfileScreen = ({ onBack, onLogout }) => {
@@ -1290,12 +1323,20 @@ import { GET_WALLET_BALANCE, WALLET_CASH_IN, GET_WALLET_TRANSACTIONS } from "../
               <View style={styles.grandTotalContent}>
                 <View style={styles.grandTotalInfo}>
                   <Text style={styles.grandTotalLabel}>Grand Total Pending Amount</Text>
-                  <Text style={styles.grandTotalAmount}>Php 582,001.50</Text>
+                  <Text style={styles.grandTotalAmount}>Php {
+                      activeLoansData ? (activeLoansData
+                        .reduce((total, loan) => total + parseFloat(loan.amount), 0))
+                        .toLocaleString("en-PH", { currency: "PHP", maximumFractionDigits: 2 }) : 0
+                    }</Text>
                   <Text style={styles.grandTotalDate}>AS OF {currentDateTime}</Text>
                 </View>
                 <TouchableOpacity 
                   style={styles.payNowButtonGrand}
-                  onPress={() => navigation.navigate('PayNow')}
+                  onPress={() => {
+                    if (!currentLoanData) return;
+
+                    navigation.navigate('PayNow', { loanApplication: currentLoanData })
+                  }}
                 >
                   <Text style={styles.payNowButtonTextGrand}>PAY NOW</Text>
                 </TouchableOpacity>
@@ -1359,14 +1400,20 @@ import { GET_WALLET_BALANCE, WALLET_CASH_IN, GET_WALLET_TRANSACTIONS } from "../
               onPress={() => navigation.navigate('CurrentLoan')}
             >
               <Text style={styles.cardTitle}>Current Loan</Text>
-              <Text style={styles.cardValue}>Php 150,000.00</Text>
+              <Text style={styles.cardValue}>
+                Php {
+                  currentLoanData.amount ? parseFloat(currentLoanData.amount).toLocaleString({ style: "currency", currency: "PHP" }) : '0.00'
+                }
+                </Text>
             </TouchableOpacity>
 
             {/* Next Payment without Pay Now (moved to Grand Total card) */}
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Next Payment Due</Text>
-              <Text style={styles.dueDate}>Aug 5, 2025</Text>
-              <Text style={styles.dueAmount}>Php 5,250.00</Text>
+              <Text style={styles.dueDate}>{ currentLoanData.dueDate ? currentLoanData.dueDate : 'N/A' }</Text>
+              <Text style={styles.dueAmount}>Php {
+                currentLoanData.monthlyPayment ? parseFloat(currentLoanData.monthlyPayment).toLocaleString("en-PH", { currency: "PHP", maximumFractionDigits: 2 }) : '0.00'
+                }</Text>
             </View>
           </View>
 
@@ -1413,7 +1460,7 @@ import { GET_WALLET_BALANCE, WALLET_CASH_IN, GET_WALLET_TRANSACTIONS } from "../
           </View>
           
           <View style={styles.transactionList}>
-            <TransactionItem 
+            {/* <TransactionItem 
               type="Payment" 
               amount="5,250.00" 
               date="Jul 5, 2023" 
@@ -1424,7 +1471,24 @@ import { GET_WALLET_BALANCE, WALLET_CASH_IN, GET_WALLET_TRANSACTIONS } from "../
               amount="150,000.00" 
               date="Jun 15, 2023" 
               status="Completed"
-            />
+            /> */}
+
+            {/* Render recent loan transactions but limit by 2 and order by decending */}
+            {
+              recentLoanTransactions
+              .sort((a, b) => b.id - a.id)
+              .map((transaction, index) => {
+                if (index < 2 ) {
+                  return <TransactionItem 
+                    key={index}
+                    type={transaction.type} 
+                    amount={transaction.amount} 
+                    date={transaction.date}
+                    status={transaction.status}
+                  />
+                }
+              })
+            }
           </View>
         </ScrollView>
 

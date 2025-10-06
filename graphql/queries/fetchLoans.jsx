@@ -19,5 +19,18 @@ const GET_LOAN_TRANSACTIONS_QUERY = gql`
     }
   }
 `
+const GET_CURRENT_LOAN_DATA_QUERY = gql`
+  query GetUserCurrentLoan {
+    getUserCurrentLoan {
+      success
+      message
+      currentLoan
+    }
+  }
+`
 
-export {  GET_LOANS_DATA_QUERY, GET_LOAN_TRANSACTIONS_QUERY };
+export {  
+  GET_LOANS_DATA_QUERY, 
+  GET_LOAN_TRANSACTIONS_QUERY,
+  GET_CURRENT_LOAN_DATA_QUERY
+ };
