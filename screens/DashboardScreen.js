@@ -1305,7 +1305,10 @@ import { GET_WALLET_BALANCE, WALLET_CASH_IN, GET_WALLET_TRANSACTIONS } from "../
             <View style={styles.walletCard}>
               <View style={styles.walletHeader}>
                 <Text style={styles.walletTitle}>My Wallet Balance</Text>
-                <TouchableOpacity onPress={() => setShowTransactionHistory(true)}>
+                <TouchableOpacity onPress={() => {
+                  setToggleReload(prev => !prev); // Reload wallet balance
+                  setShowTransactionHistory(true);
+                  }}>
                   <MaterialIcons name="history" size={20} color="rgba(255, 255, 255, 0.8)" />
                 </TouchableOpacity>
               </View>
