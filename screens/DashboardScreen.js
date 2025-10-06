@@ -14,7 +14,7 @@
   import { SafeAreaView } from 'react-native-safe-area-context';
   import { MaterialIcons } from '@expo/vector-icons';
   import ProfileScreen from './ProfileScreen';
-import { GET_WALLET_BALANCE, WALLET_CASH_IN } from "../actions/wallets.action";
+import { GET_WALLET_BALANCE, WALLET_CASH_IN, GET_WALLET_TRANSACTIONS } from "../actions/wallets.action";
 
   const { width } = Dimensions.get('window');
 
@@ -224,17 +224,17 @@ import { GET_WALLET_BALANCE, WALLET_CASH_IN } from "../actions/wallets.action";
       const method = cashInMethods.find(m => m.id === selectedCashInMethod);
       const totalAmount = amount - method.fee;
       
-      // Add to transaction history
-      const newTransaction = {
-        id: Date.now(),
-        type: 'Cash In',
-        amount: totalAmount,
-        source: method.name,
-        date: new Date().toISOString(),
-        status: 'Completed',
-        fee: method.fee
-      };
-      setWalletTransactions(prev => [newTransaction, ...prev]);
+      // // Add to transaction history
+      // const newTransaction = {
+      //   id: Date.now(),
+      //   type: 'Cash In',
+      //   amount: totalAmount,
+      //   source: method.name,
+      //   date: new Date().toISOString(),
+      //   status: 'Completed',
+      //   fee: method.fee
+      // };
+      // setWalletTransactions(prev => [newTransaction, ...prev]);
       
       // Add notification
       const notification = {
@@ -389,7 +389,7 @@ import { GET_WALLET_BALANCE, WALLET_CASH_IN } from "../actions/wallets.action";
       });
     };
 
-    // Fetch wallet balance on render
+    // Fetch wallet balance and wallet transactions on render
     useEffect(() => {
       const fetchWalletBalance = async () => {
         const { success, balance } = await GET_WALLET_BALANCE();
@@ -399,6 +399,15 @@ import { GET_WALLET_BALANCE, WALLET_CASH_IN } from "../actions/wallets.action";
         }
       };
 
+      const fetchWalletTransactions = async () => {
+        const { success, message, transactions } = await GET_WALLET_TRANSACTIONS();
+
+        if (success) {
+          setWalletTransactions(transactions);
+        };
+      };
+
+      fetchWalletTransactions();
       fetchWalletBalance();
     }, [toggleReload])
 
@@ -738,7 +747,7 @@ import { GET_WALLET_BALANCE, WALLET_CASH_IN } from "../actions/wallets.action";
                     <MaterialIcons 
                       name={
                         transaction.type === 'Transfer Out' ? 'send' :
-                        transaction.type === 'Cash In' ? 'add-circle' :
+                        transaction.type.toLowerCase() === 'cash in' ? 'add-circle' :
                         transaction.type === 'QR Payment' ? 'qr-code' :
                         'account-balance'
                       } 
@@ -749,7 +758,7 @@ import { GET_WALLET_BALANCE, WALLET_CASH_IN } from "../actions/wallets.action";
                   <View style={styles.transactionHistoryDetails}>
                     <Text style={styles.transactionHistoryType}>{transaction.type}</Text>
                     <Text style={styles.transactionHistoryDate}>
-                      {formatTransactionDate(transaction.date)}
+                      {transaction.date}
                     </Text>
                     {transaction.recipient && (
                       <Text style={styles.transactionHistoryExtra}>To: {transaction.recipient}</Text>

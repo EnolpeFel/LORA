@@ -2,6 +2,7 @@ import client from "../lib/apolloClient";
 import { GET_WALLET_BALANCE_QUERY } from "../graphql/queries/fetchWalletBalance";
 import { WALLET_CASH_IN_QUERY } from "../graphql/mutations/cashIn";
 import { WALLET_PAYMENT_QUERY } from "../graphql/mutations/walletPayment";
+import { GET_WALLET_TRANSACTIONS_QUERY } from "../graphql/queries/fetchWalletTransactions";
 import { getToken } from "../lib/cookies";
 
 const GET_WALLET_BALANCE = async () => {
@@ -118,8 +119,55 @@ const WALLET_PAYMENT = async (loanId) => {
   }
 };
 
+const GET_WALLET_TRANSACTIONS = async () => {
+  try {
+    const token = await getToken();
+
+    const { data } = await client.query({
+      query: GET_WALLET_TRANSACTIONS_QUERY,
+      fetchPolicy: 'no-cache',
+      context: {
+        headers: {
+          Authorization: token
+        }
+      }
+    });
+
+    const { success, message, transactions } = data.getWalletTransactions;
+
+    if(!success) {
+      return {
+        success,
+        message,
+        transactions: []
+      };
+    };
+
+    if (transactions.length === 0) {
+      return {
+        success,
+        message,
+        transactions: []
+      };
+    };
+
+    return {
+      success: true,
+      message,
+      transactions
+    };
+
+  } catch (err) {
+    return {
+      success: false,
+      message: err.message
+    };
+  };
+};
+
 export { 
   GET_WALLET_BALANCE, 
   WALLET_CASH_IN, 
-  WALLET_PAYMENT 
+  WALLET_PAYMENT,
+  GET_WALLET_TRANSACTIONS 
 };
