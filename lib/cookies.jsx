@@ -26,4 +26,10 @@ const savePhoneToken = async (token) => {
   });
 }
 
-export { saveToken, getToken, getPhoneToken, savePhoneToken };
+// Removes the token from the secure store
+const removeToken = async () => {
+  await SecureStore.deleteItemAsync('token');
+  await SecureStore.deleteItemAsync('phone-token');
+}
+
+export { saveToken, getToken, getPhoneToken, savePhoneToken, removeToken };
