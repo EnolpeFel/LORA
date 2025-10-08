@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons'; // Make sure to install this package
 
 const MyLoanScreen = ({ route, navigation }) => {
   const { loanId } = route.params;
@@ -26,9 +27,25 @@ const MyLoanScreen = ({ route, navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Loan Details</Text>
+      {/* Fixed Header */}
+      <View style={styles.fixedHeader}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Ionicons name="arrow-back" size={24} color="#333" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Loan Details</Text>
+        <View style={styles.headerPlaceholder} />
+      </View>
+
+      {/* Scrollable Content */}
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.loanIdContainer}>
           <Text style={styles.loanId}>ID: {loanId}</Text>
         </View>
 
@@ -97,22 +114,55 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F5F5F5',
   },
-  content: {
-    padding: 20,
-    paddingBottom: 40,
+  // Fixed Header Styles
+  fixedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'white',
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5E5',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+    zIndex: 1000,
   },
-  header: {
-    marginBottom: 20,
+  backButton: {
+    padding: 5,
   },
   headerTitle: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
+    textAlign: 'center',
+  },
+  headerPlaceholder: {
+    width: 24, // Same as back button for balance
+  },
+  // Scroll View
+  scrollView: {
+    flex: 1,
+  },
+  content: {
+    padding: 20,
+    paddingTop: 10, // Reduced top padding since we have fixed header
+    paddingBottom: 40,
+  },
+  loanIdContainer: {
+    marginBottom: 20,
+    marginTop: 10,
   },
   loanId: {
     fontSize: 14,
     color: '#666',
-    marginTop: 5,
+    textAlign: 'center',
   },
   summaryCard: {
     backgroundColor: 'white',
@@ -130,11 +180,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333',
     marginBottom: 5,
+    textAlign: 'center',
   },
   summaryStatus: {
     fontSize: 16,
     color: '#666',
     marginBottom: 20,
+    textAlign: 'center',
   },
   summaryDetails: {
     flexDirection: 'row',
