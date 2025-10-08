@@ -13,6 +13,10 @@ import QRPayScreen from "./screens/QRPayScreen";
 import CashInScreen from "./screens/CashInScreen";
 import PayNowScreen from "./screens/PayNowScreen";
 import CreditReportScreen from "./screens/CreditReportScreen";
+import ProfileScreen from "./screens/ProfileScreen";
+
+import CurrentLoanScreen from "./screens/CurrentLoanScreen";
+
 
 const Stack = createNativeStackNavigator();
 
@@ -33,20 +37,25 @@ export default function App() {
           name="CreateAccount" 
           component={CreateAccountScreen} 
         />
-
+       
         {/* Main App Screens */}
         <Stack.Screen 
           name="Dashboard" 
           component={DashboardScreen} 
         />
-        <Stack.Screen 
-  name="CreditReport" 
-  component={CreditReportScreen}
-  options={{
-    headerShown: false,
-    presentation: 'modal' // Optional: makes it slide up like a modal
-  }}
-/>
+        <Stack.Screen name="CurrentLoan" component={CurrentLoanScreen} />
+        <Stack.Screen
+          name="CreditReport" 
+          component={CreditReportScreen}
+          options={{
+            headerShown: false,
+            presentation: 'modal' // Optional: makes it slide up like a modal
+          }}
+          />
+        <Stack.Screen
+          name="Profile" 
+          component={ProfileScreen} 
+        />
         <Stack.Screen 
           name="Loans" 
           component={LoansScreen} 
