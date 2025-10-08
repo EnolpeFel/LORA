@@ -1,206 +1,461 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  StatusBar,
-  ScrollView,
-  SafeAreaView,
-  Alert,
-  Dimensions,
-} from 'react-native';
-import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 
-const { width } = Dimensions.get('window');
+// Mock data for loan history
+const LoanService = {
+  getLoans: async () => {
+    // Simulate API delay
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Return mock loan data with proper structure for PayNowScreen
+    return [
+      {
+        id: 'LN-2023-001',
+        amount: '150,000.00',
+        status: 'Active',
+        interestRate: '12',
+        term: '12 months',
+        remainingBalance: '120,000.00',
+        nextPayment: 'Aug 5, 2023',
+        nextPaymentAmount: '13,750.00',
+        lender: 'Lora Lending',
+        type: 'Personal Loan',
+        applicationDate: 'Jul 15, 2023',
+        dueDate: 'Aug 5, 2023',
+        totalAmountDue: '13,750.00',
+        loanAmount: 150000,
+        totalInterest: 18000,
+        interestType: 'Fixed Rate',
+        processingFee: 2000,
+        monthlyPayment: '13,750.00',
+        totalPayment: 150000,
+        totalPayableAmount: 168000,
+        netRelease: 148000,
+        terms: '12 months',
+        date: 'Jul 15, 2023',
+        paymentBreakdown: [
+          { description: 'Principal', amount: '12500.00' },
+          { description: 'Interest', amount: '1250.00' }
+        ]
+      },
+      {
+        id: 'LN-2023-002',
+        amount: '75,000.00',
+        status: 'Active',
+        interestRate: '10',
+        term: '6 months',
+        remainingBalance: '45,000.00',
+        nextPayment: 'Jul 25, 2023',
+        nextPaymentAmount: '13,125.00',
+        lender: 'GCredit',
+        type: 'Emergency Loan',
+        applicationDate: 'Jun 20, 2023',
+        dueDate: 'Jul 25, 2023',
+        totalAmountDue: '13,125.00',
+        loanAmount: 75000,
+        totalInterest: 3750,
+        interestType: 'Fixed Rate',
+        processingFee: 1500,
+        monthlyPayment: '13,125.00',
+        totalPayment: 75000,
+        totalPayableAmount: 78750,
+        netRelease: 73500,
+        terms: '6 months',
+        date: 'Jun 20, 2023',
+        paymentBreakdown: [
+          { description: 'Principal', amount: '12500.00' },
+          { description: 'Interest', amount: '625.00' }
+        ]
+      },
+      {
+        id: 'LN-2022-015',
+        amount: '200,000.00',
+        status: 'Completed',
+        interestRate: '15',
+        term: '24 months',
+        remainingBalance: '0.00',
+        nextPayment: 'N/A',
+        nextPaymentAmount: '0.00',
+        lender: 'Bank of PHP',
+        type: 'Business Loan',
+        applicationDate: 'Jan 10, 2022',
+        dueDate: 'Dec 15, 2023',
+        totalAmountDue: '0.00',
+        loanAmount: 200000,
+        totalInterest: 60000,
+        interestType: 'Fixed Rate',
+        processingFee: 3000,
+        monthlyPayment: '10,833.33',
+        totalPayment: 200000,
+        totalPayableAmount: 260000,
+        netRelease: 197000,
+        terms: '24 months',
+        date: 'Jan 10, 2022',
+        paymentBreakdown: [
+          { description: 'Principal', amount: '8333.33' },
+          { description: 'Interest', amount: '2500.00' }
+        ]
+      },
+      {
+        id: 'LN-2023-003',
+        amount: '50,000.00',
+        status: 'Processing',
+        interestRate: 'TBD',
+        term: '3 months',
+        remainingBalance: 'N/A',
+        nextPayment: 'TBD',
+        nextPaymentAmount: 'TBD',
+        lender: 'Quick Loans Inc',
+        type: 'Short Term Loan',
+        applicationDate: 'Aug 1, 2023',
+        dueDate: 'TBD',
+        totalAmountDue: 'TBD',
+        loanAmount: 50000,
+        totalInterest: 0,
+        interestType: 'TBD',
+        processingFee: 0,
+        monthlyPayment: 'TBD',
+        totalPayment: 0,
+        totalPayableAmount: 0,
+        netRelease: 0,
+        terms: '3 months',
+        date: 'Aug 1, 2023',
+        paymentBreakdown: []
+      }
+    ];
+  },
+};
 
-const LoanManagementApp = () => {
-  const [loans] = useState([
-    {
-      id: 1,
-      title: 'Home Mortgage',
-      amount: 225000,
-      originated: '03/15/2020',
-      term: '30 years',
-      status: 'active'
-    },
-    {
-      id: 2,
-      title: 'Auto Loan',
-      amount: 28500,
-      originated: '08/22/2022',
-      term: '5 years',
-      status: 'active'
-    },
-    {
-      id: 3,
-      title: 'Personal Loan',
-      amount: 15000,
-      originated: '01/10/2023',
-      term: '3 years',
-      status: 'active'
-    },
-  ]);
+const MyLoansScreen = ({ navigation }) => {
+  const [loans, setLoans] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const [applicationHistory] = useState([
-    {
-      id: 1,
-      title: 'Education Loan',
-      amount: 12000,
-      applied: '11/05/2023',
-      status: 'pending'
-    },
-    {
-      id: 2,
-      title: 'Small Business Loan',
-      amount: 50000,
-      applied: '09/18/2021',
-      status: 'paid'
+  useEffect(() => {
+    fetchLoans();
+  }, []);
+
+  const fetchLoans = async () => {
+    try {
+      setLoading(true);
+      const loanData = await LoanService.getLoans();
+      setLoans(loanData);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to fetch loans. Please try again.');
+      console.error('Error fetching loans:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-  ]);
-
-  const handleBackPress = () => {
-    Alert.alert('Go Back', 'Navigating back to previous screen');
   };
 
-  const formatCurrency = (amount) => {
-    return `$${amount.toLocaleString()}`;
+  const handleRefresh = () => {
+    setRefreshing(true);
+    fetchLoans();
+  };
+
+  const parseAmount = (amountStr) => {
+    if (!amountStr || amountStr === 'N/A' || amountStr === 'TBD') return 0;
+    const cleanStr = String(amountStr).replace(/,/g, '');
+    return parseFloat(cleanStr) || 0;
+  };
+
+  const handleLoanPress = (loan) => {
+    if (!navigation || typeof navigation.navigate !== 'function') {
+      Alert.alert('Error', 'Navigation not available');
+      return;
+    }
+
+    // For Processing loans, show loan details without payment option
+    if (loan.status === 'Processing' || loan.status === 'Pending') {
+      Alert.alert(
+        'Loan Application',
+        `Loan ID: ${loan.id}\nStatus: ${loan.status}\nAmount: ₱${loan.amount}\n\nYour loan is being processed. You will be notified once it's approved.`,
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    // For Completed loans, show completion message
+    if (loan.status === 'Completed') {
+      Alert.alert(
+        'Loan Completed',
+        `Loan ID: ${loan.id}\n\nThis loan has been fully paid.\n\nOriginal Amount: ₱${loan.amount}\nFinal Payment: ${loan.dueDate}`,
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    // For Active loans, don't do anything on card press
+    // User must click the Pay Now button
+  };
+
+  const handlePayNow = (loan) => {
+    if (!navigation || typeof navigation.navigate !== 'function') {
+      Alert.alert('Error', 'Navigation not available');
+      return;
+    }
+
+    // Only allow payment for Active loans
+    if (loan.status !== 'Active') {
+      return;
+    }
+
+    // Parse amounts
+    const monthlyPaymentAmount = parseAmount(loan.monthlyPayment);
+    const remainingBalanceAmount = parseAmount(loan.remainingBalance);
+    
+    // Calculate principal and interest from payment breakdown
+    let principalAmount = 0;
+    let interestAmount = 0;
+    
+    if (loan.paymentBreakdown && loan.paymentBreakdown.length > 0) {
+      const principalBreakdown = loan.paymentBreakdown.find(item => 
+        item.description.toLowerCase().includes('principal')
+      );
+      const interestBreakdown = loan.paymentBreakdown.find(item => 
+        item.description.toLowerCase().includes('interest')
+      );
+      
+      if (principalBreakdown) {
+        principalAmount = parseAmount(principalBreakdown.amount);
+      }
+      if (interestBreakdown) {
+        interestAmount = parseAmount(interestBreakdown.amount);
+      }
+    } else {
+      // Default calculation if no breakdown
+      principalAmount = monthlyPaymentAmount * 0.85;
+      interestAmount = monthlyPaymentAmount * 0.15;
+    }
+
+    // Calculate payments remaining
+    const paymentsRemaining = remainingBalanceAmount > 0 && monthlyPaymentAmount > 0 
+      ? Math.ceil(remainingBalanceAmount / principalAmount) 
+      : 0;
+
+    // Parse term to get total payments
+    const termMatch = (loan.term || '').match(/(\d+)/);
+    const totalPayments = termMatch ? parseInt(termMatch[1]) : 12;
+    const paymentsCompleted = totalPayments - paymentsRemaining;
+
+    // Map the loan data
+    const mappedLoanData = {
+      id: loan.id,
+      amount: loan.amount,
+      status: loan.status,
+      interestRate: loan.interestRate,
+      terms: loan.term,
+      lender: loan.lender,
+      type: loan.type,
+      dueDate: loan.dueDate,
+      date: loan.applicationDate,
+      loanAmount: loan.loanAmount,
+      totalInterest: loan.totalInterest,
+      interestType: loan.interestType,
+      processingFee: loan.processingFee,
+      monthlyPayment: loan.monthlyPayment,
+      totalPayment: loan.totalPayment,
+      totalPayableAmount: loan.totalPayableAmount,
+      netRelease: loan.netRelease,
+      paymentBreakdown: loan.paymentBreakdown || [],
+      remainingBalance: remainingBalanceAmount,
+      nextPayment: loan.nextPayment,
+      nextPaymentAmount: loan.nextPaymentAmount,
+      totalAmountDue: parseAmount(loan.totalAmountDue),
+      nextDueDate: loan.dueDate,
+      paymentsCompleted: paymentsCompleted > 0 ? paymentsCompleted : 1,
+      paymentsRemaining: paymentsRemaining > 0 ? paymentsRemaining : totalPayments - 1
+    };
+
+    // Create billing info
+    const billingInfo = {
+      basePayment: monthlyPaymentAmount,
+      principalAmount: principalAmount,
+      interestAmount: interestAmount,
+      lateFees: 0,
+      totalAmountDue: monthlyPaymentAmount,
+      daysLate: 0
+    };
+
+    // Navigate to PayNow
+    navigation.navigate('PayNow', { 
+      loanApplication: mappedLoanData,
+      billingInfo: billingInfo,
+      transactions: []
+    });
+  };
+
+  const getStatusColor = (status) => {
+    const statusLower = (status || '').toLowerCase();
+    switch (statusLower) {
+      case 'active':
+        return { backgroundColor: '#DCFCE7', color: '#166534' };
+      case 'processing':
+      case 'pending':
+        return { backgroundColor: '#FEF3C7', color: '#92400E' };
+      case 'completed':
+        return { backgroundColor: '#EFF6FF', color: '#1E40AF' };
+      default:
+        return { backgroundColor: '#F3F4F6', color: '#6B7280' };
+    }
+  };
+
+  const calculateMonthlyInterest = (loan) => {
+    if (!loan || loan.status !== 'Active' || loan.interestRate === 'TBD') {
+      return 'N/A';
+    }
+    
+    try {
+      const remainingBalanceStr = (loan.remainingBalance || '0').replace(/,/g, '');
+      const principal = parseFloat(remainingBalanceStr) || loan.loanAmount || 0;
+      const interestRateNum = parseFloat(loan.interestRate);
+      
+      if (isNaN(principal) || isNaN(interestRateNum) || principal <= 0) {
+        return 'N/A';
+      }
+      
+      const annualRate = interestRateNum / 100;
+      const monthlyRate = annualRate / 12;
+      const monthlyInterest = principal * monthlyRate;
+      
+      return `₱${monthlyInterest.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    } catch (error) {
+      console.error('Error calculating monthly interest:', error);
+      return 'N/A';
+    }
+  };
+
+  const formatCurrency = (value) => {
+    if (!value || value === 'N/A' || value === 'TBD') return value;
+    return `₱${value}`;
+  };
+
+  const renderLoanCard = (loan) => {
+    if (!loan) return null;
+
+    const statusColors = getStatusColor(loan.status);
+
+    return (
+      <View 
+        key={loan.id}
+        style={styles.loanCard}
+      >
+        <TouchableOpacity 
+          onPress={() => handleLoanPress(loan)}
+          activeOpacity={loan.status === 'Active' ? 1 : 0.7}
+        >
+          <View style={styles.loanHeader}>
+            <Text style={styles.loanId}>{loan.id || 'N/A'}</Text>
+            <View style={[styles.loanStatus, { backgroundColor: statusColors.backgroundColor }]}>
+              <Text style={[styles.loanStatusText, { color: statusColors.color }]}>
+                {loan.status || 'Unknown'}
+              </Text>
+            </View>
+          </View>
+          
+          <Text style={styles.loanAmount}>{formatCurrency(loan.amount)}</Text>
+          
+          <View style={styles.loanDetails}>
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Lender</Text>
+              <Text style={styles.detailValue}>{loan.lender || 'N/A'}</Text>
+            </View>
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Type</Text>
+              <Text style={styles.detailValue}>{loan.type || 'N/A'}</Text>
+            </View>
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Term</Text>
+              <Text style={styles.detailValue}>{loan.term || 'N/A'}</Text>
+            </View>
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Interest Rate</Text>
+              <Text style={styles.detailValue}>
+                {loan.interestRate === 'TBD' ? 'TBD' : `${loan.interestRate}%`}
+              </Text>
+            </View>
+          </View>
+          
+          <View style={styles.loanDetails}>
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Application Date</Text>
+              <Text style={styles.detailValue}>{loan.applicationDate || 'N/A'}</Text>
+            </View>
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Due Date</Text>
+              <Text style={styles.detailValue}>{loan.dueDate || 'N/A'}</Text>
+            </View>
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Remaining Balance</Text>
+              <Text style={styles.detailValue}>
+                {loan.remainingBalance === 'N/A' ? 'N/A' : formatCurrency(loan.remainingBalance)}
+              </Text>
+            </View>
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Monthly Payment</Text>
+              <Text style={styles.detailValue}>
+                {loan.monthlyPayment === 'TBD' ? 'TBD' : formatCurrency(loan.monthlyPayment)}
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+        
+        {loan.status === 'Active' && (
+          <TouchableOpacity
+            style={styles.payNowButton}
+            onPress={() => handlePayNow(loan)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.actionButtonText}>Pay Now</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#6a11cb" />
-      
-      {/* Header - Exact replica of web design */}
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <View style={styles.leftSection}>
-            <View style={styles.logo}>
-              <MaterialIcons name="account-balance" size={28} color="#ffd700" />
-              <Text style={styles.logoText}>FinSecure</Text>
-            </View>
-            <View style={styles.navLinks}>
-              <TouchableOpacity style={styles.navLink}>
-                <Text style={styles.navLinkText}>Dashboard</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.navLink, styles.activeNavLink]}>
-                <Text style={[styles.navLinkText, styles.activeNavLinkText]}>My Loans</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.navLink}>
-                <Text style={styles.navLinkText}>Applications</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.navLink}>
-                <Text style={styles.navLinkText}>Documents</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-          
-          <View style={styles.centerSection}>
-            <View style={styles.pageTitle}>
-              <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
-                <Ionicons name="arrow-back" size={20} color="white" />
-                <Text style={styles.backButtonText}>Back</Text>
-              </TouchableOpacity>
-              <Text style={styles.headerTitle}>My Loans</Text>
-            </View>
-          </View>
-          
-          <View style={styles.rightSection}>
-            <TouchableOpacity style={styles.iconButton}>
-              <Ionicons name="notifications-outline" size={24} color="white" />
-              <View style={styles.notificationBadge}>
-                <Text style={styles.badgeText}>3</Text>
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.iconButton}>
-              <Ionicons name="settings-outline" size={24} color="white" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.userProfile}>
-              <View style={styles.userAvatar}>
-                <Text style={styles.avatarText}>JS</Text>
-              </View>
-              <Text style={styles.userName}>John Smith</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <View style={styles.headerContainer}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => navigation?.goBack && navigation.goBack()}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="arrow-back" size={24} color="#333" />
+        </TouchableOpacity>
+        <Text style={styles.header}>My Loans</Text>
       </View>
 
-      {/* Main Content - Exact replica */}
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Loan Stats */}
-        <View style={styles.loanStats}>
-          <View style={styles.statCard}>
-            <Text style={styles.statTitle}>Total Loan Balance</Text>
-            <Text style={styles.statValue}>$42,580</Text>
+      <ScrollView 
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={handleRefresh}
+            colors={['#8B5CF6']}
+            tintColor="#8B5CF6"
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
+        {loading && loans.length === 0 ? (
+          <View style={styles.loadingState}>
+            <Text style={styles.loadingText}>Loading loans...</Text>
           </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statTitle}>Monthly Payment</Text>
-            <Text style={styles.statValue}>$1,250</Text>
+        ) : loans.length > 0 ? (
+          loans.map(loan => renderLoanCard(loan))
+        ) : (
+          <View style={styles.emptyState}>
+            <Ionicons name="document-text-outline" size={64} color="#CCC" />
+            <Text style={styles.emptyStateText}>No loans found</Text>
+            <Text style={styles.emptyStateSubtext}>
+              You don't have any loans yet. Apply for your first loan to get started.
+            </Text>
           </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statTitle}>Remaining Terms</Text>
-            <Text style={styles.statValue}>34 months</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statTitle}>Interest Rate</Text>
-            <Text style={styles.statValue}>4.25%</Text>
-          </View>
-        </View>
-
-        {/* Active Loans Card */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Ionicons name="list" size={24} color="#6a11cb" />
-            <Text style={styles.cardTitle}>Active Loans</Text>
-          </View>
-          <View style={styles.loanList}>
-            {loans.map(loan => (
-              <View key={loan.id} style={styles.loanItem}>
-                <View style={styles.loanInfo}>
-                  <Text style={styles.loanName}>{loan.title}</Text>
-                  <View style={styles.loanDetails}>
-                    <Text style={styles.loanDetail}>Originated: {loan.originated}</Text>
-                    <Text style={styles.loanDetail}>Term: {loan.term}</Text>
-                  </View>
-                </View>
-                <Text style={styles.loanAmount}>{formatCurrency(loan.amount)}</Text>
-                <View style={[styles.loanStatus, styles.statusActive]}>
-                  <Text style={styles.statusText}>Active</Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        {/* Application History Card */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Ionicons name="time" size={24} color="#6a11cb" />
-            <Text style={styles.cardTitle}>Loan Application History</Text>
-          </View>
-          <View style={styles.loanList}>
-            {applicationHistory.map(app => (
-              <View key={app.id} style={styles.loanItem}>
-                <View style={styles.loanInfo}>
-                  <Text style={styles.loanName}>{app.title}</Text>
-                  <View style={styles.loanDetails}>
-                    <Text style={styles.loanDetail}>Applied: {app.applied}</Text>
-                    <Text style={styles.loanDetail}>Amount: {formatCurrency(app.amount)}</Text>
-                  </View>
-                </View>
-                <Text style={styles.loanAmount}>{formatCurrency(app.amount)}</Text>
-                <View style={[
-                  styles.loanStatus, 
-                  app.status === 'pending' ? styles.statusPending : styles.statusPaid
-                ]}>
-                  <Text style={styles.statusText}>
-                    {app.status === 'pending' ? 'Pending' : 'Paid Off'}
-                  </Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -209,245 +464,138 @@ const LoanManagementApp = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#F5F5F5',
   },
-  header: {
-    backgroundColor: '#6a11cb',
-    paddingVertical: 16,
-  },
-  headerContent: {
+  headerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-  },
-  leftSection: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  logo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  logoText: {
-    color: 'white',
-    fontSize: 22,
-    fontWeight: '700',
-    marginLeft: 8,
-  },
-  navLinks: {
-    flexDirection: 'row',
-    marginLeft: 32,
-    gap: 24,
-  },
-  navLink: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 4,
-  },
-  activeNavLink: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  navLinkText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  activeNavLinkText: {
-    fontWeight: '600',
-  },
-  centerSection: {
-    flex: 2,
-    alignItems: 'center',
-  },
-  pageTitle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
+    padding: 15,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEE',
   },
   backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    gap: 8,
+    marginRight: 12,
+    padding: 4,
   },
-  backButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  headerTitle: {
-    color: 'white',
-    fontSize: 24,
-    fontWeight: '600',
-  },
-  rightSection: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 16,
-  },
-  iconButton: {
-    padding: 8,
-    position: 'relative',
-  },
-  notificationBadge: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    backgroundColor: '#ff4757',
-    borderRadius: 10,
-    width: 18,
-    height: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  badgeText: {
-    color: 'white',
-    fontSize: 10,
+  header: {
+    fontSize: 22,
     fontWeight: 'bold',
-  },
-  userProfile: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-  },
-  userAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  userName: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '500',
+    color: '#333',
   },
   content: {
-    flex: 1,
-    padding: 24,
+    padding: 20,
+    paddingBottom: 40,
   },
-  loanStats: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: 24,
-    gap: 16,
-  },
-  statCard: {
-    width: (width - 80) / 2,
-    backgroundColor: 'white',
-    borderRadius: 10,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-    borderLeftWidth: 4,
-    borderLeftColor: '#6a11cb',
-  },
-  statTitle: {
-    fontSize: 14,
-    color: '#718096',
-    marginBottom: 8,
-  },
-  statValue: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#2d3748',
-  },
-  card: {
+  loanCard: {
     backgroundColor: 'white',
     borderRadius: 12,
-    padding: 24,
-    marginBottom: 24,
+    padding: 20,
+    marginBottom: 15,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
     elevation: 3,
   },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 20,
-  },
-  cardTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#2d3748',
-  },
-  loanList: {
-    gap: 16,
-  },
-  loanItem: {
+  loanHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
-    borderRadius: 8,
-    padding: 20,
+    marginBottom: 12,
   },
-  loanInfo: {
-    flex: 1,
-  },
-  loanName: {
-    fontSize: 18,
+  loanId: {
+    fontSize: 16,
     fontWeight: '600',
-    color: '#2d3748',
-    marginBottom: 8,
+    color: '#333',
+  },
+  loanStatus: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  loanStatusText: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  loanAmount: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 16,
   },
   loanDetails: {
     flexDirection: 'row',
-    gap: 24,
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 12,
   },
-  loanDetail: {
-    fontSize: 14,
-    color: '#718096',
+  detailItem: {
+    width: '48%',
+    marginBottom: 8,
   },
-  loanAmount: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#2d3748',
-    marginHorizontal: 16,
+  detailLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+    fontWeight: '500',
   },
-  loanStatus: {
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-  },
-  statusActive: {
-    backgroundColor: '#e3f2fd',
-  },
-  statusPending: {
-    backgroundColor: '#fff3e0',
-  },
-  statusPaid: {
-    backgroundColor: '#e8f5e9',
-  },
-  statusText: {
+  detailValue: {
     fontSize: 14,
     fontWeight: '600',
+    color: '#333',
+  },
+  actionButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  payNowButton: {
+    backgroundColor: '#8B5CF6',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  viewButton: {
+    backgroundColor: '#4F46E5',
+  },
+  actionButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
+  },
+  loadingState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#666',
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+  },
+  emptyStateText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#666',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });
 
-export default LoanManagementApp;
+export default MyLoansScreen;
