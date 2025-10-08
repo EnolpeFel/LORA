@@ -14,7 +14,7 @@ import CashInScreen from "./screens/CashInScreen";
 import PayNowScreen from "./screens/PayNowScreen";
 import CreditReportScreen from "./screens/CreditReportScreen";
 import ProfileScreen from "./screens/ProfileScreen";
-
+import SwitchAccountScreen from "./screens/SwitchAccountScreen";
 import CurrentLoanScreen from "./screens/CurrentLoanScreen";
 
 
@@ -37,7 +37,11 @@ export default function App() {
           name="CreateAccount" 
           component={CreateAccountScreen} 
         />
-       
+        <Stack.Screen 
+          name="SwitchAccount" 
+          component={SwitchAccountScreen} 
+        />
+
         {/* Main App Screens */}
         <Stack.Screen 
           name="Dashboard" 

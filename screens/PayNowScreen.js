@@ -153,9 +153,9 @@ const PayNowScreen = ({ navigation, route }) => {
     navigation.goBack();
   };
 
+  // Function to navigate to transactions
   const goToTransactions = () => {
     const updatedTransactions = newTransaction ? [newTransaction, ...transactions] : transactions;
-    setShowConfirmationModal(false);
     navigation.navigate('Transactions', { 
       transactions: updatedTransactions 
     });
