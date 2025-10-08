@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons, FontAwesome, Feather } from '@expo/vector-icons';
-import { GET_ACCOUNT_DATA } from "../actions/account.action";
+import { GET_ACCOUNT_DATA, GET_NOTIFICATIONS } from "../actions/account.action";
 import { removeToken } from "../lib/cookies";
 import { format } from "date-fns";
 
@@ -190,6 +190,17 @@ const ProfileScreen = ({ navigation }) => {
 
     };
 
+    const fetchNotifications = async () => {
+      const { success, message, notifications } = await GET_NOTIFICATIONS();
+
+      console.log(notifications);
+
+      // if (success) {
+      //   setNotifications(notifications);
+      // };
+    };
+
+    fetchNotifications();
     fetchProfileData();
   }, [navigation]);
 
