@@ -16,12 +16,14 @@
   import ProfileScreen from './ProfileScreen';
 import { GET_WALLET_BALANCE, WALLET_CASH_IN, GET_WALLET_TRANSACTIONS } from "../actions/wallets.action";
 import { GET_LOAN_TRANSACTIONS, GET_CURRENT_LOAN_DATA, GET_LOANS_DATA } from "../actions/loans.action";
+import { GET_NOTIFICATIONS, UPDATE_NOTIFICATIONS } from "../actions/account.action";
+import { formatDistanceToNow } from "date-fns";
 
   const { width } = Dimensions.get('window');
 
   const DashboardScreen = ({ navigation, route }) => {
     const [showProfile, setShowProfile] = useState(false);
-    const [hasUnreadNotifications, setHasUnreadNotifications] = useState(true);
+    const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
     const [showNotifications, setShowNotifications] = useState(false);
     const [showCreditScoreModal, setShowCreditScoreModal] = useState(false);
     const [showLoanStatusModal, setShowLoanStatusModal] = useState(false);
@@ -241,15 +243,15 @@ import { GET_LOAN_TRANSACTIONS, GET_CURRENT_LOAN_DATA, GET_LOANS_DATA } from "..
       // setWalletTransactions(prev => [newTransaction, ...prev]);
       
       // Add notification
-      const notification = {
-        id: Date.now(),
-        title: 'Cash In Successful',
-        message: `Php ${totalAmount.toFixed(2)} added to your wallet via ${method.name}`,
-        time: 'Just now',
-        read: false
-      };
-      setNotifications(prev => [notification, ...prev]);
-      setHasUnreadNotifications(true);
+      // const notification = {
+      //   id: Date.now(),
+      //   title: 'Cash In Successful',
+      //   message: `Php ${totalAmount.toFixed(2)} added to your wallet via ${method.name}`,
+      //   time: 'Just now',
+      //   read: false
+      // };
+      // setNotifications(prev => [notification, ...prev]);
+      // setHasUnreadNotifications(true);
       
       // Reset form and close modal
       setCashInAmount('');
@@ -370,17 +372,29 @@ import { GET_LOAN_TRANSACTIONS, GET_CURRENT_LOAN_DATA, GET_LOANS_DATA } from "..
       navigation.navigate('Welcome');
     };
 
-    const handleNotificationPress = (id) => {
-      const updatedNotifications = notifications.map(notification => 
-        notification.id === id ? {...notification, read: true} : notification
-      );
-      setNotifications(updatedNotifications);
-      setHasUnreadNotifications(updatedNotifications.some(n => !n.read));
+    const handleNotificationPress = async (id) => {
+      // const updatedNotifications = notifications.map(notification => 
+      //   notification.id === id ? {...notification, read: true} : notification
+      // );
+      // setNotifications(updatedNotifications);
+      // setHasUnreadNotifications(updatedNotifications.some(n => !n.read));
+
+      const { success, message } = await UPDATE_NOTIFICATIONS(id);
+
+      if (success) {
+        setToggleReload(prev => !prev);
+      };
     };
 
-    const markAllAsRead = () => {
-      setNotifications(notifications.map(n => ({...n, read: true})));
-      setHasUnreadNotifications(false);
+    const markAllAsRead = async () => {
+      // setNotifications(notifications.map(n => ({...n, read: true})));
+      // setHasUnreadNotifications(false);
+
+      const { success, message } = await UPDATE_NOTIFICATIONS(null);
+      
+      if (success) {
+        setToggleReload(prev => !prev);
+      };
     };
 
     const formatTransactionDate = (dateString) => {
@@ -436,7 +450,26 @@ import { GET_LOAN_TRANSACTIONS, GET_CURRENT_LOAN_DATA, GET_LOANS_DATA } from "..
           setActiveLoansData(activeLoans);
         };
       };
+
+      const fetchNotifications = async () => {
+        const { success, message, notifications } = await GET_NOTIFICATIONS();
+
+        if (success) {
+          const formattedNotifications = notifications.map(notif => {
+            return {
+              ...notif,
+              time: formatDistanceToNow(notif.createdAt, { addSuffix: true }),
+              read: notif.isRead
+            };
+          })
+          .sort((a, b) => b.id - a.id);
+
+          setNotifications(formattedNotifications);
+          setHasUnreadNotifications(formattedNotifications.some(n => !n.read));
+        };
+      }; 
       
+      fetchNotifications();
       fetchActiveLoans();
       fetchCurrentLoanData();
       fetchRecentLoanTransactions();
@@ -1477,7 +1510,7 @@ import { GET_LOAN_TRANSACTIONS, GET_CURRENT_LOAN_DATA, GET_LOANS_DATA } from "..
             {/* Render recent loan transactions but limit by 2 and order by decending */}
             {
               recentLoanTransactions
-              .sort((a, b) => b.id - a.id)
+              .sort((a, b) => b.transactionId - a.transactionId)
               .map((transaction, index) => {
                 if (index < 2 ) {
                   return <TransactionItem 

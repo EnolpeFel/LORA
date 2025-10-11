@@ -18,7 +18,7 @@ const TransactionsScreen = ({ navigation, route }) => {
       const { success, message, loanTransactions  } = await GET_LOAN_TRANSACTIONS();
 
       if (success) {
-        setTransactionDatas(loanTransactions);
+        setTransactionDatas(loanTransactions.sort((a, b) => b.transactionId - a.transactionId));
       };
     };
 
