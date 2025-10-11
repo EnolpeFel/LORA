@@ -16,14 +16,14 @@
   import ProfileScreen from './ProfileScreen';
 import { GET_WALLET_BALANCE, WALLET_CASH_IN, GET_WALLET_TRANSACTIONS } from "../actions/wallets.action";
 import { GET_LOAN_TRANSACTIONS, GET_CURRENT_LOAN_DATA, GET_LOANS_DATA } from "../actions/loans.action";
-import { GET_NOTIFICATIONS } from "../actions/account.action";
+import { GET_NOTIFICATIONS, UPDATE_NOTIFICATIONS } from "../actions/account.action";
 import { formatDistanceToNow } from "date-fns";
 
   const { width } = Dimensions.get('window');
 
   const DashboardScreen = ({ navigation, route }) => {
     const [showProfile, setShowProfile] = useState(false);
-    const [hasUnreadNotifications, setHasUnreadNotifications] = useState(true);
+    const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
     const [showNotifications, setShowNotifications] = useState(false);
     const [showCreditScoreModal, setShowCreditScoreModal] = useState(false);
     const [showLoanStatusModal, setShowLoanStatusModal] = useState(false);
@@ -372,17 +372,29 @@ import { formatDistanceToNow } from "date-fns";
       navigation.navigate('Welcome');
     };
 
-    const handleNotificationPress = (id) => {
-      const updatedNotifications = notifications.map(notification => 
-        notification.id === id ? {...notification, read: true} : notification
-      );
-      setNotifications(updatedNotifications);
-      setHasUnreadNotifications(updatedNotifications.some(n => !n.read));
+    const handleNotificationPress = async (id) => {
+      // const updatedNotifications = notifications.map(notification => 
+      //   notification.id === id ? {...notification, read: true} : notification
+      // );
+      // setNotifications(updatedNotifications);
+      // setHasUnreadNotifications(updatedNotifications.some(n => !n.read));
+
+      const { success, message } = await UPDATE_NOTIFICATIONS(id);
+
+      if (success) {
+        setToggleReload(prev => !prev);
+      };
     };
 
-    const markAllAsRead = () => {
-      setNotifications(notifications.map(n => ({...n, read: true})));
-      setHasUnreadNotifications(false);
+    const markAllAsRead = async () => {
+      // setNotifications(notifications.map(n => ({...n, read: true})));
+      // setHasUnreadNotifications(false);
+
+      const { success, message } = await UPDATE_NOTIFICATIONS(null);
+      
+      if (success) {
+        setToggleReload(prev => !prev);
+      };
     };
 
     const formatTransactionDate = (dateString) => {
@@ -453,6 +465,7 @@ import { formatDistanceToNow } from "date-fns";
           .sort((a, b) => b.id - a.id);
 
           setNotifications(formattedNotifications);
+          setHasUnreadNotifications(formattedNotifications.some(n => !n.read));
         };
       }; 
       
