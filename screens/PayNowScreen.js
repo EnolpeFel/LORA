@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
+import { WALLET_PAYMENT, GET_WALLET_BALANCE } from "../actions/wallets.action";
 
 const { width, height } = Dimensions.get('window');
 
@@ -160,6 +161,21 @@ const PayNowScreen = ({ navigation, route }) => {
       transactions: updatedTransactions 
     });
   };
+
+  // Fetch wallet balance
+  useEffect(() => {
+    const fetchWalletBalance = async () => {
+      const { success, message, balance } = await GET_WALLET_BALANCE();
+
+      if (!success) {
+        Alert.alert('Error', message);
+        return;
+      }
+
+      setWalletBalance(balance);
+    };
+    fetchWalletBalance();
+  }, []);
 
   // Show loading while processing loan application data
   if (!loanDetails) {

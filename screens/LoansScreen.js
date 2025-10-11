@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { GET_LOANS_DATA } from "../actions/loans.action";
 
 // Mock data for loan history
 const LoanService = {
@@ -139,9 +140,16 @@ const MyLoansScreen = ({ navigation }) => {
 
   const fetchLoans = async () => {
     try {
-      setLoading(true);
-      const loanData = await LoanService.getLoans();
-      setLoans(loanData);
+      const { success, message, loans } = await GET_LOANS_DATA();
+
+      if (!success) {
+        throw new Error(message);
+      }
+
+      // Mock loans data
+      // const loans = await LoanService.getLoans();
+
+      setLoans(loans);
     } catch (error) {
       Alert.alert('Error', 'Failed to fetch loans. Please try again.');
       console.error('Error fetching loans:', error);
