@@ -5,6 +5,8 @@ const WALLET_PAYMENT_QUERY = gql`
     walletPayment(loanId: $loanId) {
       success
       message
+      transactionId
+      referenceNumber
     }
   }
 `
