@@ -98,7 +98,7 @@ const WALLET_PAYMENT = async (loanId) => {
       }
     });
 
-    const { success, message } = data.walletPayment;
+    const { success, message, transactionId, referenceNumber } = data.walletPayment;
 
     if(!success) {
       return {
@@ -109,7 +109,9 @@ const WALLET_PAYMENT = async (loanId) => {
 
     return {
       success: true,
-      message
+      message,
+      transactionId,
+      referenceNumber
     };
   } catch (err) {
     return {

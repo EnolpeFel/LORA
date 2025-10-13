@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { GET_LOANS_DATA } from "../actions/loans.action";
+import { GET_LOANS_DATA, GET_LOAN_TRANSACTIONS } from "../actions/loans.action";
 
 // Mock data for loan history
 const LoanService = {
@@ -133,9 +133,11 @@ const MyLoansScreen = ({ navigation }) => {
   const [loans, setLoans] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loansTransactions, setLoanTransactions] = useState([]);
 
   useEffect(() => {
     fetchLoans();
+    fetchLoansTransactions();
   }, []);
 
   const fetchLoans = async () => {
@@ -159,9 +161,23 @@ const MyLoansScreen = ({ navigation }) => {
     }
   };
 
+  const fetchLoansTransactions = async () => {
+    try {
+      const { success, message, loanTransactions } = await GET_LOAN_TRANSACTIONS();
+
+      if (success) {
+        setLoanTransactions(loanTransactions);
+      };
+
+    } catch (err) {
+      console.log(err);
+    }
+  };
+
   const handleRefresh = () => {
     setRefreshing(true);
     fetchLoans();
+    fetchLoansTransactions();
   };
 
   const parseAmount = (amountStr) => {
@@ -177,7 +193,7 @@ const MyLoansScreen = ({ navigation }) => {
     }
 
     // For Processing loans, show loan details without payment option
-    if (loan.status === 'Processing' || loan.status === 'Pending') {
+    if (loan.status === 'PROCESSING') {
       Alert.alert(
         'Loan Application',
         `Loan ID: ${loan.id}\nStatus: ${loan.status}\nAmount: ₱${loan.amount}\n\nYour loan is being processed. You will be notified once it's approved.`,
@@ -187,7 +203,7 @@ const MyLoansScreen = ({ navigation }) => {
     }
 
     // For Completed loans, show completion message
-    if (loan.status === 'Completed') {
+    if (loan.status === 'COMPLETED') {
       Alert.alert(
         'Loan Completed',
         `Loan ID: ${loan.id}\n\nThis loan has been fully paid.\n\nOriginal Amount: ₱${loan.amount}\nFinal Payment: ${loan.dueDate}`,
@@ -207,7 +223,7 @@ const MyLoansScreen = ({ navigation }) => {
     }
 
     // Only allow payment for Active loans
-    if (loan.status !== 'Active') {
+    if (loan.status !== 'ACTIVE') {
       return;
     }
 
@@ -238,16 +254,14 @@ const MyLoansScreen = ({ navigation }) => {
       principalAmount = monthlyPaymentAmount * 0.85;
       interestAmount = monthlyPaymentAmount * 0.15;
     }
+    
+    // Parse term to get total payments
+    const termMatch = parseInt(loan.term.replace(" months", ""));
+    const totalPayments = loansTransactions.filter(tx => tx.loanId === loan.id);
+    const paymentsCompleted = totalPayments.length;
 
     // Calculate payments remaining
-    const paymentsRemaining = remainingBalanceAmount > 0 && monthlyPaymentAmount > 0 
-      ? Math.ceil(remainingBalanceAmount / principalAmount) 
-      : 0;
-
-    // Parse term to get total payments
-    const termMatch = (loan.term || '').match(/(\d+)/);
-    const totalPayments = termMatch ? parseInt(termMatch[1]) : 12;
-    const paymentsCompleted = totalPayments - paymentsRemaining;
+    const paymentsRemaining = termMatch - paymentsCompleted;
 
     // Map the loan data
     const mappedLoanData = {
@@ -274,8 +288,8 @@ const MyLoansScreen = ({ navigation }) => {
       nextPaymentAmount: loan.nextPaymentAmount,
       totalAmountDue: parseAmount(loan.totalAmountDue),
       nextDueDate: loan.dueDate,
-      paymentsCompleted: paymentsCompleted > 0 ? paymentsCompleted : 1,
-      paymentsRemaining: paymentsRemaining > 0 ? paymentsRemaining : totalPayments - 1
+      paymentsCompleted,
+      paymentsRemaining
     };
 
     // Create billing info
@@ -353,7 +367,7 @@ const MyLoansScreen = ({ navigation }) => {
       >
         <TouchableOpacity 
           onPress={() => handleLoanPress(loan)}
-          activeOpacity={loan.status === 'Active' ? 1 : 0.7}
+          activeOpacity={loan.status === 'ACTIVE' ? 1 : 0.7}
         >
           <View style={styles.loanHeader}>
             <Text style={styles.loanId}>{loan.id || 'N/A'}</Text>
@@ -411,7 +425,7 @@ const MyLoansScreen = ({ navigation }) => {
           </View>
         </TouchableOpacity>
         
-        {loan.status === 'Active' && (
+        {loan.status === 'ACTIVE' && (
           <TouchableOpacity
             style={styles.payNowButton}
             onPress={() => handlePayNow(loan)}
