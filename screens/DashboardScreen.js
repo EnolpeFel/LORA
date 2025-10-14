@@ -14,12 +14,16 @@
   import { SafeAreaView } from 'react-native-safe-area-context';
   import { MaterialIcons } from '@expo/vector-icons';
   import ProfileScreen from './ProfileScreen';
+import { GET_WALLET_BALANCE, WALLET_CASH_IN, GET_WALLET_TRANSACTIONS } from "../actions/wallets.action";
+import { GET_LOAN_TRANSACTIONS, GET_CURRENT_LOAN_DATA, GET_LOANS_DATA } from "../actions/loans.action";
+import { GET_NOTIFICATIONS, UPDATE_NOTIFICATIONS } from "../actions/account.action";
+import { formatDistanceToNow } from "date-fns";
 
   const { width } = Dimensions.get('window');
 
   const DashboardScreen = ({ navigation, route }) => {
     const [showProfile, setShowProfile] = useState(false);
-    const [hasUnreadNotifications, setHasUnreadNotifications] = useState(true);
+    const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
     const [showNotifications, setShowNotifications] = useState(false);
     const [showCreditScoreModal, setShowCreditScoreModal] = useState(false);
     const [showLoanStatusModal, setShowLoanStatusModal] = useState(false);
@@ -27,8 +31,13 @@
     const [currentDateTime, setCurrentDateTime] = useState('');
     const [loanApplicationStatus, setLoanApplicationStatus] = useState(null);
     const [activeTab, setActiveTab] = useState('pending');
-    const [walletBalance, setWalletBalance] = useState(12500.75);
+    const [walletBalance, setWalletBalance] = useState(0);
     const [showWalletActions, setShowWalletActions] = useState(false);
+    const [recentLoanTransactions, setRecentLoanTransactions] = useState([]);
+    const [currentLoanData, setCurrentLoanData] = useState([]);
+    const [activeLoansData, setActiveLoansData] = useState([]);
+
+    const [toggleReload, setToggleReload] = useState(false);
     
     // Wallet feature modals
     const [showTransferModal, setShowTransferModal] = useState(false);
@@ -189,7 +198,7 @@
       Alert.alert('Success', `Php ${amount.toFixed(2)} transferred successfully via ${bankName}!`);
     };
 
-    const handleCashIn = () => {
+    const handleCashIn = async () => {
       const amount = parseFloat(cashInAmount);
       if (!amount || amount <= 0) {
         Alert.alert('Error', 'Please enter a valid amount');
@@ -200,34 +209,49 @@
         return;
       }
 
+      // Cash in process
+      /*
+        To do: change the selected cash in method to dynamic once the paymongo integration is done,
+        also make sure it matches to the types of the wallet cash in methods in the backend.
+
+        These are the types accepted in the backend (If you change this, change it in the backend too): 
+        GCASH, PAYMAYA, BANK_TRANSFER, OVER_THE_COUNTER, CREDIT_CARD, DEBIT_CARD
+      */ 
+      const { success, message } = await WALLET_CASH_IN(amount, "GCASH");
+
+      if (!success) {
+        Alert.alert('Error', message);
+        return;
+      }
+
+      // Reload wallet balance (This will trigger the useEffect to update the balance)
+      setToggleReload(prev => !prev);
+
       const method = cashInMethods.find(m => m.id === selectedCashInMethod);
       const totalAmount = amount - method.fee;
       
-      // Process cash in
-      setWalletBalance(prev => prev + totalAmount);
-      
-      // Add to transaction history
-      const newTransaction = {
-        id: Date.now(),
-        type: 'Cash In',
-        amount: totalAmount,
-        source: method.name,
-        date: new Date().toISOString(),
-        status: 'Completed',
-        fee: method.fee
-      };
-      setWalletTransactions(prev => [newTransaction, ...prev]);
+      // // Add to transaction history
+      // const newTransaction = {
+      //   id: Date.now(),
+      //   type: 'Cash In',
+      //   amount: totalAmount,
+      //   source: method.name,
+      //   date: new Date().toISOString(),
+      //   status: 'Completed',
+      //   fee: method.fee
+      // };
+      // setWalletTransactions(prev => [newTransaction, ...prev]);
       
       // Add notification
-      const notification = {
-        id: Date.now(),
-        title: 'Cash In Successful',
-        message: `Php ${totalAmount.toFixed(2)} added to your wallet via ${method.name}`,
-        time: 'Just now',
-        read: false
-      };
-      setNotifications(prev => [notification, ...prev]);
-      setHasUnreadNotifications(true);
+      // const notification = {
+      //   id: Date.now(),
+      //   title: 'Cash In Successful',
+      //   message: `Php ${totalAmount.toFixed(2)} added to your wallet via ${method.name}`,
+      //   time: 'Just now',
+      //   read: false
+      // };
+      // setNotifications(prev => [notification, ...prev]);
+      // setHasUnreadNotifications(true);
       
       // Reset form and close modal
       setCashInAmount('');
@@ -348,17 +372,29 @@
       navigation.navigate('Welcome');
     };
 
-    const handleNotificationPress = (id) => {
-      const updatedNotifications = notifications.map(notification => 
-        notification.id === id ? {...notification, read: true} : notification
-      );
-      setNotifications(updatedNotifications);
-      setHasUnreadNotifications(updatedNotifications.some(n => !n.read));
+    const handleNotificationPress = async (id) => {
+      // const updatedNotifications = notifications.map(notification => 
+      //   notification.id === id ? {...notification, read: true} : notification
+      // );
+      // setNotifications(updatedNotifications);
+      // setHasUnreadNotifications(updatedNotifications.some(n => !n.read));
+
+      const { success, message } = await UPDATE_NOTIFICATIONS(id);
+
+      if (success) {
+        setToggleReload(prev => !prev);
+      };
     };
 
-    const markAllAsRead = () => {
-      setNotifications(notifications.map(n => ({...n, read: true})));
-      setHasUnreadNotifications(false);
+    const markAllAsRead = async () => {
+      // setNotifications(notifications.map(n => ({...n, read: true})));
+      // setHasUnreadNotifications(false);
+
+      const { success, message } = await UPDATE_NOTIFICATIONS(null);
+      
+      if (success) {
+        setToggleReload(prev => !prev);
+      };
     };
 
     const formatTransactionDate = (dateString) => {
@@ -370,6 +406,76 @@
         minute: '2-digit'
       });
     };
+
+    // Fetch wallet balance, wallet and loan transactions on render
+    useEffect(() => {
+      const fetchWalletBalance = async () => {
+        const { success, balance } = await GET_WALLET_BALANCE();
+
+        if (success) {
+          setWalletBalance(balance);
+        }
+      };
+
+      const fetchWalletTransactions = async () => {
+        const { success, message, transactions } = await GET_WALLET_TRANSACTIONS();
+
+        if (success) {
+          setWalletTransactions(transactions);
+        };
+      };
+
+      const fetchRecentLoanTransactions = async () => {
+        const { success, message, loanTransactions  } = await GET_LOAN_TRANSACTIONS();
+  
+        if (success) {
+          setRecentLoanTransactions(loanTransactions);
+        };
+      };
+
+      const fetchCurrentLoanData = async () => {
+        const { success, message, currentLoan } = await GET_CURRENT_LOAN_DATA();
+
+        if (success) {
+          setCurrentLoanData(currentLoan);
+        };
+      };
+
+      const fetchActiveLoans = async () => {
+        const { success, message, loans } = await GET_LOANS_DATA();
+
+        const activeLoans = loans.filter((loan) => loan.status === "ACTIVE")
+
+        if (success) {
+          setActiveLoansData(activeLoans);
+        };
+      };
+
+      const fetchNotifications = async () => {
+        const { success, message, notifications } = await GET_NOTIFICATIONS();
+
+        if (success) {
+          const formattedNotifications = notifications.map(notif => {
+            return {
+              ...notif,
+              time: formatDistanceToNow(notif.createdAt, { addSuffix: true }),
+              read: notif.isRead
+            };
+          })
+          .sort((a, b) => b.id - a.id);
+
+          setNotifications(formattedNotifications);
+          setHasUnreadNotifications(formattedNotifications.some(n => !n.read));
+        };
+      }; 
+      
+      fetchNotifications();
+      fetchActiveLoans();
+      fetchCurrentLoanData();
+      fetchRecentLoanTransactions();
+      fetchWalletTransactions();
+      fetchWalletBalance();
+    }, [toggleReload, route.params])
 
     // Simple Profile Screen Component
     const ProfileScreen = ({ onBack, onLogout }) => {
@@ -707,7 +813,7 @@
                     <MaterialIcons 
                       name={
                         transaction.type === 'Transfer Out' ? 'send' :
-                        transaction.type === 'Cash In' ? 'add-circle' :
+                        transaction.type.toLowerCase() === 'cash in' ? 'add-circle' :
                         transaction.type === 'QR Payment' ? 'qr-code' :
                         'account-balance'
                       } 
@@ -718,7 +824,7 @@
                   <View style={styles.transactionHistoryDetails}>
                     <Text style={styles.transactionHistoryType}>{transaction.type}</Text>
                     <Text style={styles.transactionHistoryDate}>
-                      {formatTransactionDate(transaction.date)}
+                      {transaction.date}
                     </Text>
                     {transaction.recipient && (
                       <Text style={styles.transactionHistoryExtra}>To: {transaction.recipient}</Text>
@@ -1250,12 +1356,21 @@
               <View style={styles.grandTotalContent}>
                 <View style={styles.grandTotalInfo}>
                   <Text style={styles.grandTotalLabel}>Grand Total Pending Amount</Text>
-                  <Text style={styles.grandTotalAmount}>Php 582,001.50</Text>
+                  <Text style={styles.grandTotalAmount}>Php {
+                      activeLoansData ? (activeLoansData
+                        .reduce((total, loan) => total + parseFloat(loan.amount), 0))
+                        .toLocaleString("en-PH", { currency: "PHP", maximumFractionDigits: 2 }) : 0
+                    }</Text>
                   <Text style={styles.grandTotalDate}>AS OF {currentDateTime}</Text>
                 </View>
                 <TouchableOpacity 
                   style={styles.payNowButtonGrand}
-                  onPress={() => navigation.navigate('PayNow')}
+                  onPress={() => {
+                    if (currentLoanData.status === "ACTIVE") {
+                      navigation.navigate('PayNow', { loanApplication: currentLoanData })
+                    };
+
+                  }}
                 >
                   <Text style={styles.payNowButtonTextGrand}>PAY NOW</Text>
                 </TouchableOpacity>
@@ -1265,7 +1380,10 @@
             <View style={styles.walletCard}>
               <View style={styles.walletHeader}>
                 <Text style={styles.walletTitle}>My Wallet Balance</Text>
-                <TouchableOpacity onPress={() => setShowTransactionHistory(true)}>
+                <TouchableOpacity onPress={() => {
+                  setToggleReload(prev => !prev); // Reload wallet balance
+                  setShowTransactionHistory(true);
+                  }}>
                   <MaterialIcons name="history" size={20} color="rgba(255, 255, 255, 0.8)" />
                 </TouchableOpacity>
               </View>
@@ -1316,14 +1434,20 @@
               onPress={() => navigation.navigate('CurrentLoan')}
             >
               <Text style={styles.cardTitle}>Current Loan</Text>
-              <Text style={styles.cardValue}>Php 150,000.00</Text>
+              <Text style={styles.cardValue}>
+                Php {
+                  currentLoanData.amount ? parseFloat(currentLoanData.amount).toLocaleString({ style: "currency", currency: "PHP" }) : '0.00'
+                }
+                </Text>
             </TouchableOpacity>
 
             {/* Next Payment without Pay Now (moved to Grand Total card) */}
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Next Payment Due</Text>
-              <Text style={styles.dueDate}>Aug 5, 2025</Text>
-              <Text style={styles.dueAmount}>Php 5,250.00</Text>
+              <Text style={styles.dueDate}>{ currentLoanData.dueDate ? currentLoanData.dueDate : 'N/A' }</Text>
+              <Text style={styles.dueAmount}>Php {
+                currentLoanData.monthlyPayment ? parseFloat(currentLoanData.monthlyPayment).toLocaleString("en-PH", { currency: "PHP", maximumFractionDigits: 2 }) : '0.00'
+                }</Text>
             </View>
           </View>
 
@@ -1370,7 +1494,7 @@
           </View>
           
           <View style={styles.transactionList}>
-            <TransactionItem 
+            {/* <TransactionItem 
               type="Payment" 
               amount="5,250.00" 
               date="Jul 5, 2023" 
@@ -1381,7 +1505,24 @@
               amount="150,000.00" 
               date="Jun 15, 2023" 
               status="Completed"
-            />
+            /> */}
+
+            {/* Render recent loan transactions but limit by 2 and order by decending */}
+            {
+              recentLoanTransactions
+              .sort((a, b) => b.transactionId - a.transactionId)
+              .map((transaction, index) => {
+                if (index < 2 ) {
+                  return <TransactionItem 
+                    key={index}
+                    type={transaction.type} 
+                    amount={transaction.amount} 
+                    date={transaction.date}
+                    status={transaction.status}
+                  />
+                }
+              })
+            }
           </View>
         </ScrollView>
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -13,6 +13,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons, FontAwesome, Feather } from '@expo/vector-icons';
+import { GET_ACCOUNT_DATA } from "../actions/account.action";
+import { removeToken } from "../lib/cookies";
+import { format } from "date-fns";
 
 const ProfileScreen = ({ navigation }) => {
   const [profileData, setProfileData] = useState({
@@ -145,7 +148,10 @@ const ProfileScreen = ({ navigation }) => {
         },
         { 
           text: "Log Out", 
-          onPress: () => navigation.navigate('Welcome'),
+          onPress: async () => {
+            await removeToken();
+            navigation.navigate('Welcome')
+          },
           style: "destructive"
         }
       ]
@@ -157,6 +163,35 @@ const ProfileScreen = ({ navigation }) => {
     if (profileData.uploadedIdImage) return { text: 'Under Review', color: '#F59E0B' };
     return { text: 'Not Verified', color: '#EF4444' };
   };
+
+  useEffect(() => {
+    const fetchProfileData = async () => {
+      const { success, message, account } = await GET_ACCOUNT_DATA();
+
+      if (success) {
+        
+        let name = `${account.fname} ${account.mname} ${account.lname}`;
+        
+        if (!account.mname) {
+          name = account.fname + " " + account.lname;
+        };
+
+        setProfileData((prev) => ({
+          ...prev, 
+          ...account,
+          name,
+          email: account.email ? account.email : "N/A",
+          memberSince: format(account.createdAt, "MMMM dd, yyyy"),
+          accountStatus: account.status,
+          phoneNumber: account.phone.replace("+63", "+63 "),
+          address: account.address_text,
+        }));
+      };
+
+    };
+
+    fetchProfileData();
+  }, [navigation]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -189,11 +224,17 @@ const ProfileScreen = ({ navigation }) => {
             </TouchableOpacity>
           )}
           <Text style={styles.name}>{profileData.name}</Text>
-          <Text style={styles.email}>{profileData.email}</Text>
-          <View style={styles.verificationBadge}>
+          <Text style={styles.email}>{profileData.phoneNumber}</Text>
+          
+          { profileData.accountStatus === "VERIFIED" && <View style={styles.verificationBadge}>
             <MaterialIcons name="verified" size={16} color="#10B981" />
             <Text style={styles.verificationText}>Verified Account</Text>
-          </View>
+          </View>}
+
+          { profileData.accountStatus === "UNVERIFIED" && <View style={styles.unverifiedBadge}>
+            <MaterialIcons name="cancel" size={16} color="#EF4444" />
+            <Text style={styles.unverifiedText}>Unverified Account</Text>
+          </View>}
         </View>
 
         {/* Account Information Section */}
@@ -370,10 +411,10 @@ const ProfileScreen = ({ navigation }) => {
               <Text style={styles.detailLabel}>Account Status</Text>
               <View style={styles.statusContainer}>
                 <View style={[styles.statusIndicator, 
-                  { backgroundColor: profileData.accountStatus === 'Verified' ? '#10B981' : '#F59E0B' }]} 
+                  { backgroundColor: profileData.accountStatus === 'VERIFIED' ? '#10B981' : '#F59E0B' }]} 
                 />
                 <Text style={[styles.detailValue, 
-                  { color: profileData.accountStatus === 'Verified' ? '#10B981' : '#F59E0B' }]}
+                  { color: profileData.accountStatus === 'VERIFIED' ? '#10B981' : '#F59E0B' }]}
                 >
                   {profileData.accountStatus}
                 </Text>
@@ -382,7 +423,7 @@ const ProfileScreen = ({ navigation }) => {
             
             <View style={[styles.detailItem, { borderBottomWidth: 0 }]}>
               <Text style={styles.detailLabel}>Account ID</Text>
-              <Text style={styles.detailValue}>USR-7894561230</Text>
+              <Text style={styles.detailValue}>{profileData.id}</Text>
             </View>
           </View>
         </View>
@@ -624,8 +665,22 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 16,
   },
+  unverifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#db8c8c',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
   verificationText: {
     color: '#10B981',
+    fontSize: 12,
+    fontWeight: '500',
+    marginLeft: 4,
+  },
+  unverifiedText: {
+    color: 'white',
     fontSize: 12,
     fontWeight: '500',
     marginLeft: 4,

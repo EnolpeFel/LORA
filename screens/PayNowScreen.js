@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
+import { WALLET_PAYMENT, GET_WALLET_BALANCE } from "../actions/wallets.action";
 
 const { width, height } = Dimensions.get('window');
 
@@ -57,14 +58,13 @@ const PayNowScreen = ({ navigation, route }) => {
         processingFee: loanApplication.processingFee || 500,
         totalPayment: loanApplication.totalPayment || 57500,
         netRelease: loanApplication.netRelease || 49500,
-        paymentsCompleted: loanApplication.paymentsCompleted || 1,
+        paymentsCompleted: loanApplication.paymentsCompleted,
         paymentsRemaining: loanApplication.paymentsRemaining || 35,
       };
       setLoanDetails(details);
     } else if (loanApplication) {
-      const isProcessingStatus = loanApplication.status === 'Processing' || loanApplication.status === 'Pending';
       
-      if (isProcessingStatus) {
+      if (loanApplication.status === 'PROCESSING') {
         setLoanDetails({
           applicationId: loanApplication.id || 'N/A',
           amount: loanApplication.amount || 'N/A',
@@ -76,7 +76,45 @@ const PayNowScreen = ({ navigation, route }) => {
           dueDate: 'To be determined',
           isProcessing: true,
         });
-      }
+      } else if (loanApplication.status === 'ACTIVE') {
+        const monthlyInterest = (loanApplication.monthlyPayment * (loanApplication.interestRate / 100)) / 12;
+
+        const details = {
+          applicationId: loanApplication.id || 'N/A',
+          amount: loanApplication.amount || 'N/A',
+          term: loanApplication.term || 'N/A',
+          lender: loanApplication.lender || 'N/A',
+          status: loanApplication.status || 'Active',
+          loanType: loanApplication.type || 'Personal Loan',
+          monthlyIncome: loanApplication.monthlyIncome || 'N/A',
+          collateral: loanApplication.collateral || 'N/A',
+          
+          basePayment: loanApplication.monthlyPayment,
+          principalAmount: loanApplication.monthlyPayment - monthlyInterest,
+          interestAmount: monthlyInterest,
+          lateFees: 0,
+          totalAmountDue: loanApplication.monthlyPayment,
+          daysLate: 0,
+          
+          dueDate: loanApplication.dueDate || '2024-01-15',
+          isProcessing: false,
+          applicationDate: loanApplication.applicationDate,
+          
+          loanAmount: loanApplication.loanAmount || 50000,
+          remainingBalance: loanApplication.remainingBalance || 45000,
+          interestRate: loanApplication.interestRate || '12.5',
+          interestType: loanApplication.interestType || 'Fixed',
+          totalInterest: loanApplication.totalInterest || 7500,
+          processingFee: loanApplication.processingFee || 500,
+          totalPayment: loanApplication.totalPayment || 57500,
+          netRelease: loanApplication.netRelease || 49500,
+          paymentsCompleted: loanApplication.transactions.length,
+          paymentsRemaining: parseInt(loanApplication.term.replace(' months', '')) - loanApplication.transactions.length,
+      };
+
+      setLoanDetails(details);
+      };
+
     } else {
       // Default data for testing
       setLoanDetails({
@@ -677,37 +715,43 @@ const PaymentMethodModalContent = ({ loanDetails, paymentAmount, transactions, o
     );
   };
 
-  const executePayment = () => {
+  const executePayment = async () => {
     setIsProcessing(true);
-
-    setTimeout(() => {
-      const transactionId = `TXN-${Date.now()}`;
-      const currentDate = new Date();
-      
-      const newTransaction = {
-        id: transactionId,
-        type: 'Payment',
-        amount: paymentAmount.toFixed(2),
-        fee: selectedMethod.fee,
-        totalAmount: (paymentAmount + selectedMethod.fee).toFixed(2),
-        date: currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        time: currentDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
-        status: selectedMethod.id === 'wallet' ? 'Completed' : 'Pending',
-        loanId: loanDetails.applicationId,
-        transactionId: transactionId,
-        paymentMethod: selectedMethod.name,
-        lender: loanDetails.lender,
-        loanType: loanDetails.loanType,
-        isPending: selectedMethod.id !== 'wallet',
-        referenceNumber: selectedMethod.category === 'ewallet' ? transactionCode : selectedMethod.category === 'bank' ? bankForm.referenceNumber : null,
-        processingMessage: selectedMethod.id !== 'wallet' 
-          ? `Your payment via ${selectedMethod.name} is being processed. This may take 1-3 business days.`
-          : null,
-      };
-
+    
+    const { success, message, transactionId, referenceNumber } = await WALLET_PAYMENT(loanDetails.applicationId);
+    
+    if (!success) {
       setIsProcessing(false);
-      onPaymentComplete(newTransaction);
-    }, 2000);
+      Alert.alert('Error', message);
+      return;
+    };
+
+    const currentDate = new Date();
+    
+    const newTransaction = {
+      id: transactionId,
+      type: 'Payment',
+      amount: paymentAmount.toFixed(2),
+      fee: selectedMethod.fee,
+      totalAmount: (paymentAmount + selectedMethod.fee).toFixed(2),
+      date: currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      time: currentDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
+      status: selectedMethod.id === 'wallet' ? 'Completed' : 'Pending',
+      loanId: loanDetails.applicationId,
+      transactionId: transactionId,
+      paymentMethod: selectedMethod.name,
+      lender: loanDetails.lender,
+      loanType: loanDetails.loanType,
+      isPending: selectedMethod.id !== 'wallet',
+      referenceNumber,
+      processingMessage: selectedMethod.id !== 'wallet' 
+        ? `Your payment via ${selectedMethod.name} is being processed. This may take 1-3 business days.`
+        : null,
+    };
+
+    setIsProcessing(false);
+    onPaymentComplete(newTransaction);
+
   };
 
   const renderForm = () => {
