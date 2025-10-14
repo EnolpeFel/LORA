@@ -77,6 +77,8 @@ const PayNowScreen = ({ navigation, route }) => {
           isProcessing: true,
         });
       } else if (loanApplication.status === 'ACTIVE') {
+        const monthlyInterest = (loanApplication.monthlyPayment * (loanApplication.interestRate / 100)) / 12;
+
         const details = {
           applicationId: loanApplication.id || 'N/A',
           amount: loanApplication.amount || 'N/A',
@@ -88,8 +90,8 @@ const PayNowScreen = ({ navigation, route }) => {
           collateral: loanApplication.collateral || 'N/A',
           
           basePayment: loanApplication.monthlyPayment,
-          principalAmount: loanApplication.monthlyPayment - loanApplication.totalInterest,
-          interestAmount: loanApplication.totalInterest,
+          principalAmount: loanApplication.monthlyPayment - monthlyInterest,
+          interestAmount: monthlyInterest,
           lateFees: 0,
           totalAmountDue: loanApplication.monthlyPayment,
           daysLate: 0,

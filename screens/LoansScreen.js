@@ -263,6 +263,8 @@ const MyLoansScreen = ({ navigation }) => {
     // Calculate payments remaining
     const paymentsRemaining = termMatch - paymentsCompleted;
 
+    const monthlyInterest = (loan.monthlyPayment * (loan.interestRate / 100)) / 12;
+
     // Map the loan data
     const mappedLoanData = {
       id: loan.id,
@@ -295,8 +297,8 @@ const MyLoansScreen = ({ navigation }) => {
     // Create billing info
     const billingInfo = {
       basePayment: monthlyPaymentAmount,
-      principalAmount: principalAmount,
-      interestAmount: interestAmount,
+      principalAmount: monthlyPaymentAmount - monthlyInterest,
+      interestAmount: monthlyInterest,
       lateFees: 0,
       totalAmountDue: monthlyPaymentAmount,
       daysLate: 0

@@ -21,7 +21,7 @@ const calculateBillingAmount = (loanData) => {
   
   // Calculate interest for current period
   const remainingBalance = loanData.remainingBalance;
-  const monthlyInterestRate = loanData.interestRate / 100;
+  const monthlyInterestRate = (loanData.interestRate / 100) / 12;
   const interestAmount = remainingBalance * monthlyInterestRate;
   
   // Calculate principal payment
@@ -221,7 +221,7 @@ const CurrentLoanScreen = ({ navigation }) => {
             ...tx,
             date: format(tx.createdAt, 'MMM dd, yyyy'),
             principal: tx.amount - (tx.amount * (currentLoan.interestRate / 100)),
-            interest: tx.amount * (currentLoan.interestRate / 100),
+            interest: tx.amount * ((currentLoan.interestRate / 100) / 12), // Monthly Interest
             paymentMethod: tx.method
           }
         })
