@@ -17,7 +17,7 @@ import { saveToken, getToken, getPhoneToken } from "../lib/cookies";
 
 const LoginScreen = ({ navigation, route }) => {
   const [pin, setPin] = useState('');
-  const [currentAccount, setCurrentAccount] = useState('+63949150024');
+  const [currentAccount, setCurrentAccount] = useState('');
   const [currentScreen, setCurrentScreen] = useState('login'); // 'login', 'switch', 'forgot', 'addExisting'
   
   // Switch Account states
@@ -76,7 +76,7 @@ const LoginScreen = ({ navigation, route }) => {
   
           if (!success) {
             Alert.alert('Error', 'Invalid token');
-            navigation.navigate('SwitchAccount');
+            setCurrentScreen('switch');
             return;
           }
           
@@ -84,7 +84,7 @@ const LoginScreen = ({ navigation, route }) => {
           return;
         }
   
-        navigation.navigate('SwitchAccount');
+        setCurrentScreen('switch');
         
       } catch (err) {
         console.log(err);
@@ -108,7 +108,12 @@ const LoginScreen = ({ navigation, route }) => {
     if (pin.length !== 4) {
       Alert.alert('Error', 'Please enter a 4-digit PIN');
       return;
-    }
+    };
+
+    if (currentAccount === '') {
+      Alert.alert('Error', 'Please enter a phone number');
+      return;
+    };
 
     try {
       const { data } = await client.mutate({
