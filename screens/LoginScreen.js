@@ -522,19 +522,7 @@ const LoginScreen = ({ navigation, route }) => {
                   flexDirection: "row", 
                   alignItems: "center",
                 }}>
-                <Text style={{
-                  fontSize: 16,
-                  fontWeight: 500,
-                  padding: 16,
-                  backgroundColor: "#e5e7eb",
-                  borderTopLeftRadius: 8,
-                  borderBottomLeftRadius: 8,
-                  borderWidth: 1,
-                  borderRightWidth: 0,
-                  borderColor: '#d1d5db',
-                  paddingHorizontal: 16,
-                  paddingVertical: 12,
-                }}>+63</Text>
+                <Text style={styles.prefixNumber}>+63</Text>
                 <TextInput
                   style={{
                     ...styles.input, 
@@ -1134,6 +1122,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
+  // Prefix Number
+  prefixNumber: {
+    fontSize: 16,
+    fontWeight: 500,
+    padding: 16,
+    backgroundColor: "#e5e7eb",
+    borderTopLeftRadius: 8,
+    borderBottomLeftRadius: 8,
+    borderWidth: 1,
+    borderRightWidth: 0,
+    borderColor: '#d1d5db',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  }
 });
 
 export default LoginScreen;
