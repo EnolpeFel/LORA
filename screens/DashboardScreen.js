@@ -1431,7 +1431,11 @@ import { formatDistanceToNow } from "date-fns";
             {/* Current Loan */}
             <TouchableOpacity 
               style={styles.card}
-              onPress={() => navigation.navigate('CurrentLoan')}
+              onPress={() => {
+                if (currentLoanData.status === "ACTIVE") {
+                  navigation.navigate('CurrentLoan');
+                };
+              }}
             >
               <Text style={styles.cardTitle}>Current Loan</Text>
               <Text style={styles.cardValue}>
