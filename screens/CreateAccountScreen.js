@@ -325,19 +325,17 @@ const CreateAccountScreen = ({ navigation }) => {
       })
 
       const {  success, message, token } = data.createAccount;
-
-      // Save the token in cookies
-      await saveToken(token);
-
-      // TO DO: Add loading and success message in UI
-      // This is a example
-
+      
       console.log(success, message);
 
       // TO DO: Add error message in UI
       if (!success) {
+        Alert.alert('Error', "Unable to create account. Please try again.");
         return;
-      }
+      };
+
+      // Save the token in cookies
+      await saveToken(token);
 
     } catch (err) {
       // TO DO: Add error message in UI
