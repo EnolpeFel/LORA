@@ -13,7 +13,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import client from "../lib/apolloClient";
 import { LOGIN_ACCOUNT } from '../graphql/mutations/loginAccount';
 import { EXTRACT_PHONE_FROM_TOKEN } from "../graphql/queries/extractPhoneToken";
-import { saveToken, getToken, getPhoneToken } from "../lib/cookies";
+import { saveToken, getPhoneToken } from "../lib/cookies";
+import { SEND_MPIN, VERIFY_MPIN, FORGET_PASSWORD } from "../actions/account.action";
 
 const LoginScreen = ({ navigation, route }) => {
   const [pin, setPin] = useState('');
@@ -134,9 +135,7 @@ const LoginScreen = ({ navigation, route }) => {
         return;
       };
 
-      // Save token if token does not exist
-      const isToken = await getToken();
-      !isToken && await saveToken(token); 
+      await saveToken(token); // as id, role
       
       navigation.navigate('Dashboard');
 
@@ -270,42 +269,77 @@ const LoginScreen = ({ navigation, route }) => {
   };
 
   // Forgot Password Functions
-  const handleSendOTP = () => {
+  const handleSendOTP = async () => {
     if (phoneNumber.length < 10) {
       Alert.alert('Invalid Number', 'Please enter a valid phone number');
       return;
     }
+
+    const { success, message } = await SEND_MPIN(phoneNumber);
+    
+    if (!success) {
+      Alert.alert('Error', message);
+      return;
+    };
+
+    console.log(success, message);
     
     Alert.alert(
       'OTP Sent',
-      `A verification code has been sent to ${phoneNumber}`,
+      `A verification code has been sent to +63 ${phoneNumber}`,
       [{ text: 'OK', onPress: () => setForgotStep(2) }]
     );
   };
 
-  const handleVerifyOTP = () => {
+  const handleVerifyOTP = async () => {
     if (otp.length !== 6) {
       Alert.alert('Invalid OTP', 'Please enter the 6-digit verification code');
       return;
-    }
+    };
+
+    const { success, message, token } = await VERIFY_MPIN(phoneNumber, otp);
     
-    if (otp === '123456') {
-      setForgotStep(3);
-    } else {
-      Alert.alert('Invalid OTP', 'The verification code is incorrect. Use 123456 for testing.');
-    }
+    if (!success) {
+      Alert.alert('Invalid OTP', 'The verification code is incorrect.');
+      return;
+    };
+
+    console.log(success, message, token);
+
+    await saveToken(token); // As phone number
+
+    setForgotStep(3);
   };
 
-  const handleResetPin = () => {
+  const handleResetPin = async () => {
     if (newPin.length !== 4) {
       Alert.alert('Invalid PIN', 'PIN must be 4 digits');
       return;
-    }
+    };
     
     if (newPin !== confirmPin) {
       Alert.alert('PIN Mismatch', 'PINs do not match');
       return;
     }
+
+    const { success, message } = await FORGET_PASSWORD(newPin);
+    
+    if (!success) {
+      Alert.alert(
+        'Error', 
+        "Account does not exist",
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              setCurrentScreen('login');
+              setPin('');
+            }
+          }
+        ]
+      );
+      return;
+    };
 
     Alert.alert(
       'Success',
@@ -522,14 +556,27 @@ const LoginScreen = ({ navigation, route }) => {
             </Text>
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>Phone Number</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="+63 9XX XXX XXXX"
-                value={phoneNumber}
-                onChangeText={setPhoneNumber}
-                keyboardType="phone-pad"
-                maxLength={13}
-              />
+              <View style={{ 
+                  display: "flex", 
+                  flexDirection: "row", 
+                  alignItems: "center",
+                }}>
+                <Text style={styles.prefixNumber}>+63</Text>
+                <TextInput
+                  style={{
+                    ...styles.input, 
+                    flexGrow: 1, 
+                    borderTopLeftRadius: 0,
+                    borderBottomLeftRadius: 0,
+                   }}
+                  placeholder="9876543210"
+                  placeholderTextColor="gray"
+                  value={phoneNumber}
+                  onChangeText={setPhoneNumber}
+                  keyboardType="phone-pad"
+                  maxLength={10}
+                  />
+              </View>
             </View>
             <TouchableOpacity
               style={styles.primaryButton}
@@ -656,14 +703,27 @@ const LoginScreen = ({ navigation, route }) => {
             </Text>
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>Phone Number</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="+63 9XX XXX XXXX"
-                value={existingPhone}
-                onChangeText={setExistingPhone}
-                keyboardType="phone-pad"
-                maxLength={13}
-              />
+              <View style={{
+                display: "flex",
+                flexDirection: "row",
+                alignItems: "center"
+              }}>
+                <Text style={styles.prefixNumber}>+63</Text>
+                <TextInput
+                  style={{
+                    ...styles.input,
+                    flexGrow: 1,
+                    borderTopLeftRadius: 0,
+                    borderBottomLeftRadius: 0
+                  }}
+                  placeholder="9876543210"
+                  placeholderTextColor="gray"
+                  value={existingPhone}
+                  onChangeText={setExistingPhone}
+                  keyboardType="phone-pad"
+                  maxLength={10}
+                />
+              </View>
             </View>
             <TouchableOpacity
               style={styles.primaryButton}
@@ -1114,6 +1174,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
+  // Prefix Number
+  prefixNumber: {
+    fontSize: 16,
+    fontWeight: 500,
+    padding: 16,
+    backgroundColor: "#e5e7eb",
+    borderTopLeftRadius: 8,
+    borderBottomLeftRadius: 8,
+    borderWidth: 1,
+    borderRightWidth: 0,
+    borderColor: '#d1d5db',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  }
 });
 
 export default LoginScreen;
