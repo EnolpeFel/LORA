@@ -517,14 +517,39 @@ const LoginScreen = ({ navigation, route }) => {
             </Text>
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>Phone Number</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="+63 9XX XXX XXXX"
-                value={phoneNumber}
-                onChangeText={setPhoneNumber}
-                keyboardType="phone-pad"
-                maxLength={13}
-              />
+              <View style={{ 
+                  display: "flex", 
+                  flexDirection: "row", 
+                  alignItems: "center",
+                }}>
+                <Text style={{
+                  fontSize: 16,
+                  fontWeight: 500,
+                  padding: 16,
+                  backgroundColor: "#e5e7eb",
+                  borderTopLeftRadius: 8,
+                  borderBottomLeftRadius: 8,
+                  borderWidth: 1,
+                  borderRightWidth: 0,
+                  borderColor: '#d1d5db',
+                  paddingHorizontal: 16,
+                  paddingVertical: 12,
+                }}>+63</Text>
+                <TextInput
+                  style={{
+                    ...styles.input, 
+                    flexGrow: 1, 
+                    borderTopLeftRadius: 0,
+                    borderBottomLeftRadius: 0,
+                   }}
+                  placeholder="9876543210"
+                  placeholderTextColor="gray"
+                  value={phoneNumber}
+                  onChangeText={setPhoneNumber}
+                  keyboardType="phone-pad"
+                  maxLength={10}
+                  />
+              </View>
             </View>
             <TouchableOpacity
               style={styles.primaryButton}
