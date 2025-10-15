@@ -664,14 +664,27 @@ const LoginScreen = ({ navigation, route }) => {
             </Text>
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>Phone Number</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="+63 9XX XXX XXXX"
-                value={existingPhone}
-                onChangeText={setExistingPhone}
-                keyboardType="phone-pad"
-                maxLength={13}
-              />
+              <View style={{
+                display: "flex",
+                flexDirection: "row",
+                alignItems: "center"
+              }}>
+                <Text style={styles.prefixNumber}>+63</Text>
+                <TextInput
+                  style={{
+                    ...styles.input,
+                    flexGrow: 1,
+                    borderTopLeftRadius: 0,
+                    borderBottomLeftRadius: 0
+                  }}
+                  placeholder="9876543210"
+                  placeholderTextColor="gray"
+                  value={existingPhone}
+                  onChangeText={setExistingPhone}
+                  keyboardType="phone-pad"
+                  maxLength={10}
+                />
+              </View>
             </View>
             <TouchableOpacity
               style={styles.primaryButton}
