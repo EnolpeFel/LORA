@@ -32,4 +32,25 @@ const removeToken = async () => {
   await SecureStore.deleteItemAsync('phone-token');
 }
 
-export { saveToken, getToken, getPhoneToken, savePhoneToken, removeToken };
+// Saves account logged in by the user
+const saveAccounts = async (account) => {
+  await SecureStore.setItemAsync('accounts', account, {
+    keychainAccessible: SecureStore.WHEN_UNLOCKED, // iOS option
+  });
+};
+
+// Get accounts
+const getAccounts = async () => {
+  const accounts = await SecureStore.getItemAsync('accounts');
+  return accounts;
+};
+
+export { 
+  saveToken, 
+  getToken, 
+  getPhoneToken, 
+  savePhoneToken, 
+  removeToken,
+  saveAccounts,
+  getAccounts
+ };

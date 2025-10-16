@@ -1,5 +1,5 @@
 import client from "../lib/apolloClient";
-import { getToken } from "../lib/cookies";
+import { getToken, getAccounts } from "../lib/cookies";
 import { GET_ACCOUNT_DATA_QUERY, GET_NOTIFICATIONS_QUERY } from "../graphql/queries/fetchAccount";
 import { UPDATE_NOTIFICATIONS_QUERY } from "../graphql/mutations/notifications";
 import { SEND_MPIN as SEND_MPIN_QUERY, VERIFY_MPIN as VERIFY_MPIN_QUERY } from "../graphql/queries/sendVerifyMpin";
@@ -244,7 +244,7 @@ const LOGIN_ACCOUNT = async (phone, pinCode) => {
       }
     });
     
-    const { success, message, token } = data.loginAccount;
+    const { success, message, token, name } = data.loginAccount;
 
     if(!success) {
       return {
@@ -256,7 +256,8 @@ const LOGIN_ACCOUNT = async (phone, pinCode) => {
     return {
       success,
       message,
-      token
+      token,
+      name
     };
 
   } catch (err) {

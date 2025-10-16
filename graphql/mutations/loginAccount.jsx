@@ -6,6 +6,7 @@ const LOGIN_ACCOUNT = gql`
       success
       message
       token
+      name
     }
   }
 `;

@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import client from "../lib/apolloClient";
 import { LOGIN_ACCOUNT } from '../graphql/mutations/loginAccount';
 import { EXTRACT_PHONE_FROM_TOKEN } from "../graphql/queries/extractPhoneToken";
-import { saveToken, getPhoneToken } from "../lib/cookies";
+import { saveToken, getPhoneToken, saveAccounts, getAccounts } from "../lib/cookies";
 import { SEND_MPIN, VERIFY_MPIN, FORGET_PASSWORD, LOGIN_ACCOUNT as LOGIN_ACCOUNT_ACTION } from "../actions/account.action";
 
 const LoginScreen = ({ navigation, route }) => {
@@ -23,9 +23,9 @@ const LoginScreen = ({ navigation, route }) => {
   
   // Switch Account states
   const [accounts, setAccounts] = useState([
-    { id: '1', phoneNumber: '+63949150024', name: 'John Doe', isActive: true },
-    { id: '2', phoneNumber: '+63917123456', name: 'Jane Smith', isActive: false },
-    { id: '3', phoneNumber: '+63928765432', name: 'Bob Johnson', isActive: false },
+    // { id: '1', phoneNumber: '+63949150024', name: 'John Doe', isActive: true },
+    // { id: '2', phoneNumber: '+63917123456', name: 'Jane Smith', isActive: false },
+    // { id: '3', phoneNumber: '+63928765432', name: 'Bob Johnson', isActive: false },
   ]);
   
   // Forgot Password states
@@ -50,50 +50,6 @@ const LoginScreen = ({ navigation, route }) => {
       navigation.setParams({ newAccount: undefined });
     }
   }, [route.params, navigation]);
-
-  /*
-    On render get token from cookies to get phone number if exist
-    else navigate to switch account to enter phone number
-  */
-  useEffect(() => {
-    const onLoad = async () => {
-      try {
-        const token = await getPhoneToken();
-
-        if (token && typeof token === "string") {
-          const { data } = await client.query({
-            query: EXTRACT_PHONE_FROM_TOKEN,
-            fetchPolicy: 'no-cache',
-            context: {
-              headers: {
-                Authorization: token,
-              }
-            }
-          })
-  
-          const { success, message, phone } = data.extractPhoneFromToken;
-
-          console.log(success, message, phone);
-  
-          if (!success) {
-            Alert.alert('Error', 'Invalid token');
-            setCurrentScreen('switch');
-            return;
-          }
-          
-          setCurrentAccount(phone);
-          return;
-        }
-  
-        setCurrentScreen('switch');
-        
-      } catch (err) {
-        console.log(err);
-      }
-    }
-
-    onLoad();
-  }, [])
 
   const handleNumberPress = (number) => {
     if (pin.length < 4) {
@@ -181,7 +137,17 @@ const LoginScreen = ({ navigation, route }) => {
         },
         {
           text: 'Switch',
-          onPress: () => {
+          onPress: async () => {
+            const changedToActive = accounts.map((acc) => {
+              return {
+                ...acc,
+                isActive: acc.phoneNumber === account.phoneNumber,
+              }
+            });
+
+            await saveAccounts(JSON.stringify(changedToActive));
+
+            setAccounts(changedToActive);
             setCurrentAccount(account.phoneNumber);
             setCurrentScreen('login');
             setPin('');
@@ -207,7 +173,7 @@ const LoginScreen = ({ navigation, route }) => {
     }
     
     // Check if account already exists
-    const accountExists = accounts.some(acc => acc.phoneNumber === existingPhone);
+    const accountExists = accounts.some(acc => acc.phoneNumber === "+63" + existingPhone);
     if (accountExists) {
       Alert.alert('Account Already Added', 'This account is already on this device');
       return;
@@ -253,42 +219,39 @@ const LoginScreen = ({ navigation, route }) => {
       return;
     };
 
-    const { success, message } = await LOGIN_ACCOUNT_ACTION("+63" + existingPhone, existingPin);
+    const { success, message, name } = await LOGIN_ACCOUNT_ACTION("+63" + existingPhone, existingPin);
 
-    console.log(success, message);
+    console.log(success, message, name);
     
     if (!success) {
       Alert.alert('Invalid PIN', message);
       return;
     };
+
+    // Add account to list
+    const newAccount = {
+      id: (accounts.length + 1).toString(),
+      phoneNumber: "+63" + existingPhone,
+      name,
+      isActive: false,
+    };
     
-    // Mock PIN verification - replace with actual API call
-    if (success) {
-      // Add account to list
-      const newAccount = {
-        id: (accounts.length + 1).toString(),
-        phoneNumber: existingPhone,
-        name: 'User ' + (accounts.length + 1),
-        isActive: false,
-      };
-      
-      setAccounts([...accounts, newAccount]);
-      
-      Alert.alert(
-        'Success',
-        'Account added successfully!',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              setCurrentScreen('switch');
-            },
+    await saveAccounts(JSON.stringify([...accounts, newAccount]));
+    setAccounts([...accounts, newAccount]);
+
+    Alert.alert(
+      'Success',
+      'Account added successfully!',
+      [
+        {
+          text: 'OK',
+          onPress: () => {
+            setCurrentScreen('switch');
           },
-        ]
-      );
-    } else {
-      Alert.alert('Invalid PIN', 'The PIN is incorrect. Use 1111 for testing.');
-    }
+        },
+      ]
+    );
+    
   };
 
   // Forgot Password Functions
@@ -378,6 +341,33 @@ const LoginScreen = ({ navigation, route }) => {
       ]
     );
   };
+
+  useEffect(() => {
+    const getAccountsOnLoad = async () => {
+      const accounts = await getAccounts();
+
+      if (accounts) {
+        const parsedAccounts = JSON.parse(accounts);
+        setAccounts(parsedAccounts);
+
+        // Set current account
+        setCurrentAccount(parsedAccounts.filter((acc) => acc.isActive)[0].phoneNumber);
+      } else {
+        setCurrentScreen('switch');
+      };
+    };
+    
+    getAccountsOnLoad();
+  }, []);
+
+  useEffect(() => {
+    if (currentAccount === '') {
+      setCurrentScreen('switch');
+    } else {
+      setCurrentScreen('login');
+    };
+
+  } , [currentAccount]);
 
   const renderNumberButton = (number) => (
     <TouchableOpacity 
