@@ -14,7 +14,7 @@ import client from "../lib/apolloClient";
 import { LOGIN_ACCOUNT } from '../graphql/mutations/loginAccount';
 import { EXTRACT_PHONE_FROM_TOKEN } from "../graphql/queries/extractPhoneToken";
 import { saveToken, getPhoneToken } from "../lib/cookies";
-import { SEND_MPIN, VERIFY_MPIN, FORGET_PASSWORD } from "../actions/account.action";
+import { SEND_MPIN, VERIFY_MPIN, FORGET_PASSWORD, LOGIN_ACCOUNT as LOGIN_ACCOUNT_ACTION } from "../actions/account.action";
 
 const LoginScreen = ({ navigation, route }) => {
   const [pin, setPin] = useState('');
@@ -200,7 +200,7 @@ const LoginScreen = ({ navigation, route }) => {
   };
 
   // Add Existing Account Functions
-  const handleSendExistingOTP = () => {
+  const handleSendExistingOTP = async () => {
     if (existingPhone.length < 10) {
       Alert.alert('Invalid Number', 'Please enter a valid phone number');
       return;
@@ -211,7 +211,16 @@ const LoginScreen = ({ navigation, route }) => {
     if (accountExists) {
       Alert.alert('Account Already Added', 'This account is already on this device');
       return;
-    }
+    };
+
+    const { success, message } = await SEND_MPIN(existingPhone);
+
+    console.log(success, message);
+    
+    if (!success) {
+      Alert.alert('Error', message);
+      return;
+    };
     
     Alert.alert(
       'OTP Sent',
@@ -220,27 +229,41 @@ const LoginScreen = ({ navigation, route }) => {
     );
   };
 
-  const handleVerifyExistingOTP = () => {
+  const handleVerifyExistingOTP = async () => {
     if (existingOtp.length !== 6) {
       Alert.alert('Invalid OTP', 'Please enter the 6-digit verification code');
       return;
     }
+
+    const { success, message } = await VERIFY_MPIN(existingPhone, existingOtp);
+
+    console.log(success, message);
     
-    if (existingOtp === '123456') {
-      setAddExistingStep(3);
-    } else {
-      Alert.alert('Invalid OTP', 'The verification code is incorrect. Use 123456 for testing.');
-    }
+    if (!success) {
+      Alert.alert('Invalid OTP', 'The verification code is incorrect.');
+      return;
+    };
+    
+    setAddExistingStep(3);
   };
 
-  const handleVerifyExistingPin = () => {
+  const handleVerifyExistingPin = async () => {
     if (existingPin.length !== 4) {
       Alert.alert('Invalid PIN', 'PIN must be 4 digits');
       return;
-    }
+    };
+
+    const { success, message } = await LOGIN_ACCOUNT_ACTION("+63" + existingPhone, existingPin);
+
+    console.log(success, message);
+    
+    if (!success) {
+      Alert.alert('Invalid PIN', message);
+      return;
+    };
     
     // Mock PIN verification - replace with actual API call
-    if (existingPin === '1111') {
+    if (success) {
       // Add account to list
       const newAccount = {
         id: (accounts.length + 1).toString(),

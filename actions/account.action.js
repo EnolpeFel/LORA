@@ -4,6 +4,7 @@ import { GET_ACCOUNT_DATA_QUERY, GET_NOTIFICATIONS_QUERY } from "../graphql/quer
 import { UPDATE_NOTIFICATIONS_QUERY } from "../graphql/mutations/notifications";
 import { SEND_MPIN as SEND_MPIN_QUERY, VERIFY_MPIN as VERIFY_MPIN_QUERY } from "../graphql/queries/sendVerifyMpin";
 import { FORGET_PASSWORD_QUERY } from "../graphql/mutations/forgetPassword";
+import { LOGIN_ACCOUNT as LOGIN_ACCOUNT_QUERY } from "../graphql/mutations/loginAccount";
 
 const GET_ACCOUNT_DATA = async () => {
   try {
@@ -231,11 +232,47 @@ const FORGET_PASSWORD = async (newPassword) => {
   }
 };
 
+const LOGIN_ACCOUNT = async (phone, pinCode) => {
+  try {
+
+    const { data } = await client.mutate({
+      mutation: LOGIN_ACCOUNT_QUERY,
+      fetchPolicy: "no-cache",
+      variables: {
+        phone,
+        pinCode
+      }
+    });
+    
+    const { success, message, token } = data.loginAccount;
+
+    if(!success) {
+      return {
+        success,
+        message
+      }
+    };
+
+    return {
+      success,
+      message,
+      token
+    };
+
+  } catch (err) {
+    return {
+      success: false,
+      message: err.message
+    };
+  }
+};
+
 export {  
   GET_ACCOUNT_DATA,
   GET_NOTIFICATIONS,
   UPDATE_NOTIFICATIONS,
   SEND_MPIN,
   VERIFY_MPIN,
-  FORGET_PASSWORD
+  FORGET_PASSWORD,
+  LOGIN_ACCOUNT
 };
