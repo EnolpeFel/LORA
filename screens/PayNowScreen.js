@@ -9,11 +9,13 @@ import {
   View,
   Modal,
   Alert,
-  Image
+  Image,
+  Linking
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { WALLET_PAYMENT, GET_WALLET_BALANCE } from "../actions/wallets.action";
+import { CREATE_PAYMENT } from "../actions/payment.action";
 
 const { width, height } = Dimensions.get('window');
 
@@ -471,6 +473,7 @@ const PayNowScreen = ({ navigation, route }) => {
           transactions={transactions}
           onClose={() => setShowPaymentMethodModal(false)}
           onPaymentComplete={handlePaymentComplete}
+          navigation={navigation}
         />
       </Modal>
 
@@ -565,7 +568,7 @@ const PayNowScreen = ({ navigation, route }) => {
 };
 
 // Payment Method Modal Content Component
-const PaymentMethodModalContent = ({ loanDetails, paymentAmount, transactions, onClose, onPaymentComplete }) => {
+const PaymentMethodModalContent = ({ loanDetails, paymentAmount, transactions, onClose, onPaymentComplete, navigation }) => {
   const [selectedMethod, setSelectedMethod] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentStep, setPaymentStep] = useState('select'); // 'select', 'qr', 'form', 'receipt'
@@ -650,19 +653,37 @@ const PaymentMethodModalContent = ({ loanDetails, paymentAmount, transactions, o
       return;
     }
 
-    // For e-wallets, show QR code
+    // Check if card form is filled
+    if (selectedMethod.category === 'card') {
+      if (!validateForm()) return;
+    };
+    
+    // For ewallet, banks and cards
+    Alert.alert(
+      'Confirm Payment',
+      'Process payment of ₱' + (paymentAmount + selectedMethod.fee).toFixed(2) + ' via ' + selectedMethod.name + '?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Confirm', onPress: () => executePayment(selectedMethod.id) }]
+    )
+    return;
+
+    /*
+    This code does nothing for now...
+
+    // For ewallet
     if (selectedMethod.id === 'gcash' || selectedMethod.id === 'maya') {
       setPaymentStep('qr');
       return;
     }
 
-    // For banks, show receipt upload
+    // For banks
     if (selectedMethod.category === 'bank') {
       setPaymentStep('receipt');
       return;
     }
 
-    // For cards, validate and proceed
+    // For cards
     if (selectedMethod.category === 'card') {
       if (!validateForm()) return;
       Alert.alert(
@@ -674,6 +695,7 @@ const PaymentMethodModalContent = ({ loanDetails, paymentAmount, transactions, o
         ]
       );
     }
+    */
   };
 
   const handleUploadReceipt = () => {
@@ -729,8 +751,63 @@ const PaymentMethodModalContent = ({ loanDetails, paymentAmount, transactions, o
     );
   };
 
-  const executePayment = async () => {
+  const executePayment = async (selectedMethodArg = "") => {
     setIsProcessing(true);
+
+    // EWALLET, BANKS and CARDS
+    if (selectedMethodArg !== "") {
+      let card = null;
+      let method = selectedMethodArg;
+      const pay_amount = paymentAmount + selectedMethod.fee;
+
+      if (["visa", "mastercard"].includes(selectedMethodArg)) {
+        card = {
+          card_number: cardForm.cardNumber.replace(/\s/g, ''), // String
+          exp_month: parseInt(cardForm.expiryDate.split("/")[0]), // Number
+          exp_year: parseInt(cardForm.expiryDate.split("/")[1]), // Number
+          cvc: cardForm.cvv // String
+        }
+      };
+
+      if (method === "maya") {
+        method = "paymaya";
+      };
+
+      const { success, message, nextActionUrls, status } = await CREATE_PAYMENT(method, pay_amount, card, loanDetails.applicationId);
+
+      console.log(nextActionUrls, status);
+
+      if (!success) {
+        setIsProcessing(false);
+        Alert.alert('Error', message);
+        return;
+      };
+
+      if (status !== "Pending") {
+        Alert.alert('Success', 'Payment submitted successfully',
+          [
+            { text: 'OK', onPress: () => navigation.navigate("Dashboard") }
+          ]
+        );
+
+        setIsProcessing(false);
+        return;
+      };
+
+      Alert.alert('Success', 'Payment submitted successfully',
+        [
+          { 
+            text: 'OK', onPress: () => {
+              Linking.openURL(nextActionUrls.redirect.url);
+              navigation.navigate("Dashboard")
+            } 
+          }
+        ]
+      );
+
+      setIsProcessing(false);
+      return;
+    };
 
     if (walletBalance < paymentAmount + selectedMethod.fee) {
       setIsProcessing(false);
