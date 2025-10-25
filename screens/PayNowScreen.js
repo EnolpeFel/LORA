@@ -575,6 +575,20 @@ const PaymentMethodModalContent = ({ loanDetails, paymentAmount, transactions, o
   const [bankForm, setBankForm] = useState({ accountNumber: '', accountName: '', bankBranch: '', referenceNumber: '' });
   const [cardForm, setCardForm] = useState({ cardNumber: '', cardholderName: '', expiryDate: '', cvv: '' });
   const [receiptImage, setReceiptImage] = useState(null);
+  const [walletBalance, setWalletBalance] = useState(0);
+
+  // Fetch wallet balance for lora wallet
+  useEffect(() => {
+    const fetchWalletBalance = async () => {
+      const { success, balance } = await GET_WALLET_BALANCE();
+
+      if (success) {
+        setWalletBalance(balance);
+      };
+    };
+
+    fetchWalletBalance();
+  } , []);
 
   const paymentMethods = [
     { id: 'wallet', name: 'Lora Wallet', icon: 'account-balance-wallet', category: 'wallet', fee: 0, description: 'Instant payment with no fees' },
@@ -717,6 +731,12 @@ const PaymentMethodModalContent = ({ loanDetails, paymentAmount, transactions, o
 
   const executePayment = async () => {
     setIsProcessing(true);
+
+    if (walletBalance < paymentAmount + selectedMethod.fee) {
+      setIsProcessing(false);
+      Alert.alert('Error', 'Insufficient wallet balance');
+      return;
+    };
     
     const { success, message, transactionId, referenceNumber } = await WALLET_PAYMENT(loanDetails.applicationId);
     
@@ -767,7 +787,7 @@ const PaymentMethodModalContent = ({ loanDetails, paymentAmount, transactions, o
             <Text style={styles.walletSubtext}>Instant payment with no fees</Text>
             <View style={styles.walletBalance}>
               <Text style={styles.balanceLabel}>Available Balance</Text>
-              <Text style={styles.balanceAmount}>₱12,500.75</Text>
+              <Text style={styles.balanceAmount}>₱{walletBalance}</Text>
             </View>
           </View>
         </View>
