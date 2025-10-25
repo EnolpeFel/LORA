@@ -10,23 +10,29 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
+import { GET_CURRENT_LOAN_DATA } from "../actions/loans.action";
+import { format, addMonths, differenceInDays, setDate } from 'date-fns';
 
 // Billing calculation utility - centralized calculation for consistency
 const calculateBillingAmount = (loanData) => {
   // Parse base monthly payment
-  const basePayment = parseFloat(loanData.monthlyPayment.replace(/[₱,]/g, ''));
+  // const basePayment = parseFloat(loanData.monthlyPayment.replace(/[₱,]/g, ''));
+  const basePayment = loanData.monthlyPayment;
   
   // Calculate interest for current period
   const remainingBalance = loanData.remainingBalance;
-  const monthlyInterestRate = loanData.interestRate / 100 / 12;
+  const monthlyInterestRate = (loanData.interestRate / 100) / 12;
   const interestAmount = remainingBalance * monthlyInterestRate;
   
   // Calculate principal payment
   const principalAmount = basePayment - interestAmount;
   
   // Check for late fees
-  const dueDate = new Date(loanData.dueDate);
   const today = new Date();
+  const dayOfActivedAt = new Date(loanData.activedAt).getDate();
+  const adjustedDate =  setDate(today, dayOfActivedAt);
+  const dueDate =  addMonths(adjustedDate, 1);
+  const daysRemaining = differenceInDays(dueDate, today);
   let lateFees = 0;
   
   if (today > dueDate) {
@@ -52,7 +58,7 @@ const CurrentLoanScreen = ({ navigation }) => {
   const [showLoanDetails, setShowLoanDetails] = useState(false);
   const [daysUntilDue, setDaysUntilDue] = useState(0);
 
-  const loanData = {
+  const [loanData,  setLoanData] = useState({
     id: 'LN-2025-001234',
     amount: '₱150,000.00',
     terms: '36 months',
@@ -79,9 +85,9 @@ const CurrentLoanScreen = ({ navigation }) => {
     loanStartDate: 'April 1, 2025',
     loanEndDate: 'April 1, 2028',
     dueDate: 'August 5, 2025',
-  };
+  });
 
-  const paymentHistory = [
+  const [paymentHistory, setPaymentHistory] = useState([
     {
       id: 1,
       date: 'July 5, 2025',
@@ -118,24 +124,27 @@ const CurrentLoanScreen = ({ navigation }) => {
       status: 'Completed',
       paymentMethod: 'GCash',
     },
-  ];
+  ]);
 
   // Calculate billing info using the centralized method
   const billingInfo = calculateBillingAmount(loanData);
 
   useEffect(() => {
     calculateDaysUntilDue();
-  }, []);
+  }, [loanData]);
 
   const calculateProgress = () => {
     return (loanData.paidAmount / loanData.loanAmount) * 100;
   };
 
   const calculateDaysUntilDue = () => {
-    const dueDate = new Date('2025-08-05');
     const today = new Date();
-    const diffTime = dueDate - today;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const dayOfActivedAt = new Date(loanData.activedAt).getDate();
+    const adjustedDate = setDate(today, dayOfActivedAt);
+    const dueDate = addMonths(adjustedDate, 1);
+    
+    const diffDays = differenceInDays(dueDate, today);
+
     setDaysUntilDue(diffDays);
   };
 
@@ -184,6 +193,48 @@ const CurrentLoanScreen = ({ navigation }) => {
 
   const isUrgent = daysUntilDue <= 7 || billingInfo.lateFees > 0;
 
+  useEffect(() => {
+    const fetchCurrentLoanData = async () => {
+      const { message, success, currentLoan } = await GET_CURRENT_LOAN_DATA();
+
+      if (success) {
+        const totalPayment = currentLoan.transactions.reduce((total, transaction) => parseFloat(total) + parseFloat(transaction.amount), 0);
+        const paymentsCompleted = currentLoan.transactions.length;
+        const paymentsRemaining = parseInt(currentLoan.terms.replace(' months', '')) - paymentsCompleted;
+
+        const formattedLoanData = {
+          ...currentLoan,
+          lender: currentLoan.lendingCompany.name,
+          collateral: 'None Collateral', // For now
+          totalPayment,
+          paidAmount: parseFloat(totalPayment),
+          nextDueDate: currentLoan.dueDate,
+          loanTerm: currentLoan.terms,
+          paymentsCompleted,
+          paymentsRemaining,
+          loanStartDate: format(currentLoan.activedAt, "MMM dd, yyyy"),
+          loanEndDate: format(addMonths(currentLoan.activedAt, parseInt(currentLoan.terms.replace(' months', ''))), "MMM dd, yyyy")
+        };
+
+        const formattedTransactionHistories = currentLoan.transactions.map((tx) => {
+          return {
+            ...tx,
+            date: format(tx.createdAt, 'MMM dd, yyyy'),
+            principal: tx.amount - (tx.amount * (currentLoan.interestRate / 100)),
+            interest: tx.amount * ((currentLoan.interestRate / 100) / 12), // Monthly Interest
+            paymentMethod: tx.method
+          }
+        })
+
+        setLoanData(formattedLoanData);
+        setPaymentHistory(formattedTransactionHistories);
+      };
+      
+    };
+
+    fetchCurrentLoanData();
+  }, [navigation]);
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
@@ -222,7 +273,7 @@ const CurrentLoanScreen = ({ navigation }) => {
             <View>
               <Text style={styles.balanceLabel}>Remaining Balance</Text>
               <Text style={styles.balanceAmount}>
-                ₱{loanData.remainingBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                ₱{parseFloat(loanData.remainingBalance).toLocaleString('en-PH', { currency: 'PHP' ,minimumFractionDigits: 2 })}
               </Text>
             </View>
             <View style={[styles.statusBadge, styles.activeStatus]}>
@@ -291,7 +342,13 @@ const CurrentLoanScreen = ({ navigation }) => {
                 <Text style={styles.paymentLabel}>Next Payment</Text>
                 <Text style={styles.paymentDateText}>{loanData.nextDueDate}</Text>
                 <Text style={[styles.paymentDaysText, isUrgent && styles.paymentDaysTextUrgent]}>
-                  {daysUntilDue > 0 ? `${daysUntilDue} days remaining` : 'Due today!'}
+                  {
+                    daysUntilDue === 0 
+                      ? 'Today'
+                      : daysUntilDue === 1 
+                        ? 'Tomorrow'
+                        : `${daysUntilDue} days`
+                  }
                 </Text>
               </View>
             </View>
@@ -410,7 +467,7 @@ const CurrentLoanScreen = ({ navigation }) => {
                     </View>
                   </View>
                   <Text style={styles.fullHistoryTotal}>
-                    ₱{payment.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    ₱{parseFloat(payment.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </Text>
                 </View>
                 
@@ -418,13 +475,13 @@ const CurrentLoanScreen = ({ navigation }) => {
                   <View style={styles.breakdownRow}>
                     <Text style={styles.breakdownLabelDetail}>Principal Payment</Text>
                     <Text style={styles.breakdownAmount}>
-                      ₱{payment.principal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      ₱{parseFloat(payment.principal).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                     </Text>
                   </View>
                   <View style={styles.breakdownRow}>
                     <Text style={styles.breakdownLabelDetail}>Interest Payment</Text>
                     <Text style={styles.breakdownAmount}>
-                      ₱{payment.interest.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      ₱{parseFloat(payment.interest).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                     </Text>
                   </View>
                 </View>

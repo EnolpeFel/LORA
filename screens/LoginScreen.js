@@ -10,17 +10,22 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import client from "../lib/apolloClient";
+import { LOGIN_ACCOUNT } from '../graphql/mutations/loginAccount';
+import { EXTRACT_PHONE_FROM_TOKEN } from "../graphql/queries/extractPhoneToken";
+import { saveToken, getPhoneToken, saveAccounts, getAccounts } from "../lib/cookies";
+import { SEND_MPIN, VERIFY_MPIN, FORGET_PASSWORD, LOGIN_ACCOUNT as LOGIN_ACCOUNT_ACTION } from "../actions/account.action";
 
 const LoginScreen = ({ navigation, route }) => {
   const [pin, setPin] = useState('');
-  const [currentAccount, setCurrentAccount] = useState('+63949150024');
+  const [currentAccount, setCurrentAccount] = useState('');
   const [currentScreen, setCurrentScreen] = useState('login'); // 'login', 'switch', 'forgot', 'addExisting'
   
   // Switch Account states
   const [accounts, setAccounts] = useState([
-    { id: '1', phoneNumber: '+63949150024', name: 'John Doe', isActive: true },
-    { id: '2', phoneNumber: '+63917123456', name: 'Jane Smith', isActive: false },
-    { id: '3', phoneNumber: '+63928765432', name: 'Bob Johnson', isActive: false },
+    // { id: '1', phoneNumber: '+63949150024', name: 'John Doe', isActive: true },
+    // { id: '2', phoneNumber: '+63917123456', name: 'Jane Smith', isActive: false },
+    // { id: '3', phoneNumber: '+63928765432', name: 'Bob Johnson', isActive: false },
   ]);
   
   // Forgot Password states
@@ -56,12 +61,45 @@ const LoginScreen = ({ navigation, route }) => {
     setPin(pin.slice(0, -1));
   };
 
-  const handleLogin = () => {
-    if (pin === correctPin) {
+  const handleLogin = async () => {
+    if (pin.length !== 4) {
+      Alert.alert('Error', 'Please enter a 4-digit PIN');
+      return;
+    };
+
+    if (currentAccount === '') {
+      Alert.alert('Error', 'Please enter a phone number');
+      return;
+    };
+
+    try {
+      const { data } = await client.mutate({
+        mutation: LOGIN_ACCOUNT,
+        variables: { phone: currentAccount.replace(" ", ""), pinCode: pin },
+        fetchPolicy: 'no-cache'
+      });
+  
+      const { success, message, token } = data.loginAccount;
+  
+      // TO DO: Add loading and success message in UI
+      // This is a example
+      console.log(success, message);
+  
+      if (!success) {
+        Alert.alert('Error', message);
+        setPin('');
+        return;
+      };
+
+      await saveToken(token); // as id, role
+      
       navigation.navigate('Dashboard');
-    } else {
-      Alert.alert('Invalid MPIN', 'Please enter the correct 4-digit MPIN');
+
+    } catch (err) {
+      // TO DO: Add error message in UI
+      console.log(err);
       setPin('');
+      return;
     }
   };
 
@@ -99,7 +137,17 @@ const LoginScreen = ({ navigation, route }) => {
         },
         {
           text: 'Switch',
-          onPress: () => {
+          onPress: async () => {
+            const changedToActive = accounts.map((acc) => {
+              return {
+                ...acc,
+                isActive: acc.phoneNumber === account.phoneNumber,
+              }
+            });
+
+            await saveAccounts(JSON.stringify(changedToActive));
+
+            setAccounts(changedToActive);
             setCurrentAccount(account.phoneNumber);
             setCurrentScreen('login');
             setPin('');
@@ -118,18 +166,27 @@ const LoginScreen = ({ navigation, route }) => {
   };
 
   // Add Existing Account Functions
-  const handleSendExistingOTP = () => {
+  const handleSendExistingOTP = async () => {
     if (existingPhone.length < 10) {
       Alert.alert('Invalid Number', 'Please enter a valid phone number');
       return;
     }
     
     // Check if account already exists
-    const accountExists = accounts.some(acc => acc.phoneNumber === existingPhone);
+    const accountExists = accounts.some(acc => acc.phoneNumber === "+63" + existingPhone);
     if (accountExists) {
       Alert.alert('Account Already Added', 'This account is already on this device');
       return;
-    }
+    };
+
+    const { success, message } = await SEND_MPIN(existingPhone);
+
+    console.log(success, message);
+    
+    if (!success) {
+      Alert.alert('Error', message);
+      return;
+    };
     
     Alert.alert(
       'OTP Sent',
@@ -138,91 +195,137 @@ const LoginScreen = ({ navigation, route }) => {
     );
   };
 
-  const handleVerifyExistingOTP = () => {
+  const handleVerifyExistingOTP = async () => {
     if (existingOtp.length !== 6) {
       Alert.alert('Invalid OTP', 'Please enter the 6-digit verification code');
       return;
     }
+
+    const { success, message } = await VERIFY_MPIN(existingPhone, existingOtp);
+
+    console.log(success, message);
     
-    if (existingOtp === '123456') {
-      setAddExistingStep(3);
-    } else {
-      Alert.alert('Invalid OTP', 'The verification code is incorrect. Use 123456 for testing.');
-    }
+    if (!success) {
+      Alert.alert('Invalid OTP', 'The verification code is incorrect.');
+      return;
+    };
+    
+    setAddExistingStep(3);
   };
 
-  const handleVerifyExistingPin = () => {
+  const handleVerifyExistingPin = async () => {
     if (existingPin.length !== 4) {
       Alert.alert('Invalid PIN', 'PIN must be 4 digits');
       return;
-    }
+    };
+
+    const { success, message, name } = await LOGIN_ACCOUNT_ACTION("+63" + existingPhone, existingPin);
+
+    console.log(success, message, name);
     
-    // Mock PIN verification - replace with actual API call
-    if (existingPin === '1111') {
-      // Add account to list
-      const newAccount = {
-        id: (accounts.length + 1).toString(),
-        phoneNumber: existingPhone,
-        name: 'User ' + (accounts.length + 1),
-        isActive: false,
-      };
-      
-      setAccounts([...accounts, newAccount]);
-      
-      Alert.alert(
-        'Success',
-        'Account added successfully!',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              setCurrentScreen('switch');
-            },
+    if (!success) {
+      Alert.alert('Invalid PIN', message);
+      return;
+    };
+
+    // Add account to list
+    const newAccount = {
+      id: (accounts.length + 1).toString(),
+      phoneNumber: "+63" + existingPhone,
+      name,
+      isActive: false,
+    };
+    
+    await saveAccounts(JSON.stringify([...accounts, newAccount]));
+    setAccounts([...accounts, newAccount]);
+
+    Alert.alert(
+      'Success',
+      'Account added successfully!',
+      [
+        {
+          text: 'OK',
+          onPress: () => {
+            setCurrentScreen('switch');
           },
-        ]
-      );
-    } else {
-      Alert.alert('Invalid PIN', 'The PIN is incorrect. Use 1111 for testing.');
-    }
+        },
+      ]
+    );
+    
   };
 
   // Forgot Password Functions
-  const handleSendOTP = () => {
+  const handleSendOTP = async () => {
     if (phoneNumber.length < 10) {
       Alert.alert('Invalid Number', 'Please enter a valid phone number');
       return;
     }
+
+    const { success, message } = await SEND_MPIN(phoneNumber);
+    
+    if (!success) {
+      Alert.alert('Error', message);
+      return;
+    };
+
+    console.log(success, message);
     
     Alert.alert(
       'OTP Sent',
-      `A verification code has been sent to ${phoneNumber}`,
+      `A verification code has been sent to +63 ${phoneNumber}`,
       [{ text: 'OK', onPress: () => setForgotStep(2) }]
     );
   };
 
-  const handleVerifyOTP = () => {
+  const handleVerifyOTP = async () => {
     if (otp.length !== 6) {
       Alert.alert('Invalid OTP', 'Please enter the 6-digit verification code');
       return;
-    }
+    };
+
+    const { success, message, token } = await VERIFY_MPIN(phoneNumber, otp);
     
-    if (otp === '123456') {
-      setForgotStep(3);
-    } else {
-      Alert.alert('Invalid OTP', 'The verification code is incorrect. Use 123456 for testing.');
-    }
+    if (!success) {
+      Alert.alert('Invalid OTP', 'The verification code is incorrect.');
+      return;
+    };
+
+    console.log(success, message, token);
+
+    await saveToken(token); // As phone number
+
+    setForgotStep(3);
   };
 
-  const handleResetPin = () => {
+  const handleResetPin = async () => {
     if (newPin.length !== 4) {
       Alert.alert('Invalid PIN', 'PIN must be 4 digits');
       return;
-    }
+    };
     
     if (newPin !== confirmPin) {
       Alert.alert('PIN Mismatch', 'PINs do not match');
       return;
     }
+
+    const { success, message } = await FORGET_PASSWORD(newPin);
+    
+    if (!success) {
+      Alert.alert(
+        'Error', 
+        "Account does not exist",
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              setCurrentScreen('login');
+              setPin('');
+            }
+          }
+        ]
+      );
+      return;
+    };
 
     Alert.alert(
       'Success',
@@ -238,6 +341,33 @@ const LoginScreen = ({ navigation, route }) => {
       ]
     );
   };
+
+  useEffect(() => {
+    const getAccountsOnLoad = async () => {
+      const accounts = await getAccounts();
+
+      if (accounts) {
+        const parsedAccounts = JSON.parse(accounts);
+        setAccounts(parsedAccounts);
+
+        // Set current account
+        setCurrentAccount(parsedAccounts.filter((acc) => acc.isActive)[0].phoneNumber);
+      } else {
+        setCurrentScreen('switch');
+      };
+    };
+    
+    getAccountsOnLoad();
+  }, []);
+
+  useEffect(() => {
+    if (currentAccount === '') {
+      setCurrentScreen('switch');
+    } else {
+      setCurrentScreen('login');
+    };
+
+  } , [currentAccount]);
 
   const renderNumberButton = (number) => (
     <TouchableOpacity 
@@ -439,14 +569,27 @@ const LoginScreen = ({ navigation, route }) => {
             </Text>
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>Phone Number</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="+63 9XX XXX XXXX"
-                value={phoneNumber}
-                onChangeText={setPhoneNumber}
-                keyboardType="phone-pad"
-                maxLength={13}
-              />
+              <View style={{ 
+                  display: "flex", 
+                  flexDirection: "row", 
+                  alignItems: "center",
+                }}>
+                <Text style={styles.prefixNumber}>+63</Text>
+                <TextInput
+                  style={{
+                    ...styles.input, 
+                    flexGrow: 1, 
+                    borderTopLeftRadius: 0,
+                    borderBottomLeftRadius: 0,
+                   }}
+                  placeholder="9876543210"
+                  placeholderTextColor="gray"
+                  value={phoneNumber}
+                  onChangeText={setPhoneNumber}
+                  keyboardType="phone-pad"
+                  maxLength={10}
+                  />
+              </View>
             </View>
             <TouchableOpacity
               style={styles.primaryButton}
@@ -573,14 +716,27 @@ const LoginScreen = ({ navigation, route }) => {
             </Text>
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>Phone Number</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="+63 9XX XXX XXXX"
-                value={existingPhone}
-                onChangeText={setExistingPhone}
-                keyboardType="phone-pad"
-                maxLength={13}
-              />
+              <View style={{
+                display: "flex",
+                flexDirection: "row",
+                alignItems: "center"
+              }}>
+                <Text style={styles.prefixNumber}>+63</Text>
+                <TextInput
+                  style={{
+                    ...styles.input,
+                    flexGrow: 1,
+                    borderTopLeftRadius: 0,
+                    borderBottomLeftRadius: 0
+                  }}
+                  placeholder="9876543210"
+                  placeholderTextColor="gray"
+                  value={existingPhone}
+                  onChangeText={setExistingPhone}
+                  keyboardType="phone-pad"
+                  maxLength={10}
+                />
+              </View>
             </View>
             <TouchableOpacity
               style={styles.primaryButton}
@@ -1031,6 +1187,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
+  // Prefix Number
+  prefixNumber: {
+    fontSize: 16,
+    fontWeight: 500,
+    padding: 16,
+    backgroundColor: "#e5e7eb",
+    borderTopLeftRadius: 8,
+    borderBottomLeftRadius: 8,
+    borderWidth: 1,
+    borderRightWidth: 0,
+    borderColor: '#d1d5db',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  }
 });
 
 export default LoginScreen;

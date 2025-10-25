@@ -10,12 +10,14 @@ import {
   Platform,
   ScrollView
 } from 'react-native';
+import client from "../lib/apolloClient";
+import { SEND_MPIN, VERIFY_MPIN } from "../graphql/queries/sendVerifyMpin";
+import { savePhoneToken } from "../lib/cookies";
 
 const SwitchAccountScreen = ({ navigation }) => {
   const [mobileNumber, setMobileNumber] = useState('');
   const [pin, setPin] = useState('');
   const [step, setStep] = useState(1);
-  const correctPin = '1111'; // Static PIN for all accounts
 
   const handleNumberPress = (number) => {
     if (pin.length < 4) {
@@ -45,7 +47,7 @@ const SwitchAccountScreen = ({ navigation }) => {
     return mobileNumber.length === 10 && mobileNumber.startsWith('9');
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (step === 1) {
       if (!validatePhilippineMobileNumber()) {
         Alert.alert(
@@ -54,18 +56,65 @@ const SwitchAccountScreen = ({ navigation }) => {
         );
         return;
       }
+
       setStep(2);
+      try {
+        // Send MPIN to mobile number
+        const sendMpinData = await client.query({
+          query: SEND_MPIN,
+          variables: { phone: mobileNumber },
+          fetchPolicy: 'no-cache'
+        });
+  
+        const responseSendMpin = sendMpinData.data.sendMPIN;
+  
+        // TO DO: Add loading and success message in UI
+        // This is a example
+        console.log(responseSendMpin.success, responseSendMpin.message);
+  
+        if (!responseSendMpin.success) {
+          Alert.alert('Error', message);
+          return;
+        }
+      } catch (err) {
+        console.log(err);
+        return;
+      }
+
     } else {
-      if (pin === correctPin) {
+      try {
+        // Verify MPIN
+        const verifyMpinData = await client.query({
+          query: VERIFY_MPIN,
+          variables: { phone: getFullMobileNumber(), code: pin },
+          fetchPolicy: 'no-cache'
+        });
+
+        const responseVerifyMpin = verifyMpinData.data.verifyMPIN;
+
+        // TO DO: Add loading and success message in UI
+        // This is a example
+        console.log(responseVerifyMpin.success, responseVerifyMpin.message, responseVerifyMpin.token);
+
+        if (!responseVerifyMpin.success) {
+          Alert.alert('Invalid MPIN', 'Please enter the correct 4-digit MPIN');
+          setPin('');
+          return;
+        };
+
+        // Save phone number token
+        await savePhoneToken(responseVerifyMpin.token);
+
         // Pass the new mobile number as a parameter when navigating back
         navigation.navigate({
           name: 'Login',
           params: { newAccount: getFullMobileNumber() },
           merge: true
         });
-      } else {
-        Alert.alert('Invalid MPIN', 'Please enter the correct 4-digit MPIN');
-        setPin('');
+
+      } catch (err) {
+        console.log(err);
+        return;
       }
     }
   };

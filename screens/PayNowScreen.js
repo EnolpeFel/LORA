@@ -9,10 +9,13 @@ import {
   View,
   Modal,
   Alert,
-  Image
+  Image,
+  Linking
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
+import { WALLET_PAYMENT, GET_WALLET_BALANCE } from "../actions/wallets.action";
+import { CREATE_PAYMENT } from "../actions/payment.action";
 
 const { width, height } = Dimensions.get('window');
 
@@ -57,14 +60,13 @@ const PayNowScreen = ({ navigation, route }) => {
         processingFee: loanApplication.processingFee || 500,
         totalPayment: loanApplication.totalPayment || 57500,
         netRelease: loanApplication.netRelease || 49500,
-        paymentsCompleted: loanApplication.paymentsCompleted || 1,
+        paymentsCompleted: loanApplication.paymentsCompleted,
         paymentsRemaining: loanApplication.paymentsRemaining || 35,
       };
       setLoanDetails(details);
     } else if (loanApplication) {
-      const isProcessingStatus = loanApplication.status === 'Processing' || loanApplication.status === 'Pending';
       
-      if (isProcessingStatus) {
+      if (loanApplication.status === 'PROCESSING') {
         setLoanDetails({
           applicationId: loanApplication.id || 'N/A',
           amount: loanApplication.amount || 'N/A',
@@ -76,7 +78,45 @@ const PayNowScreen = ({ navigation, route }) => {
           dueDate: 'To be determined',
           isProcessing: true,
         });
-      }
+      } else if (loanApplication.status === 'ACTIVE') {
+        const monthlyInterest = (loanApplication.monthlyPayment * (loanApplication.interestRate / 100)) / 12;
+
+        const details = {
+          applicationId: loanApplication.id || 'N/A',
+          amount: loanApplication.amount || 'N/A',
+          term: loanApplication.term || 'N/A',
+          lender: loanApplication.lender || 'N/A',
+          status: loanApplication.status || 'Active',
+          loanType: loanApplication.type || 'Personal Loan',
+          monthlyIncome: loanApplication.monthlyIncome || 'N/A',
+          collateral: loanApplication.collateral || 'N/A',
+          
+          basePayment: loanApplication.monthlyPayment,
+          principalAmount: loanApplication.monthlyPayment - monthlyInterest,
+          interestAmount: monthlyInterest,
+          lateFees: 0,
+          totalAmountDue: loanApplication.monthlyPayment,
+          daysLate: 0,
+          
+          dueDate: loanApplication.dueDate || '2024-01-15',
+          isProcessing: false,
+          applicationDate: loanApplication.applicationDate,
+          
+          loanAmount: loanApplication.loanAmount || 50000,
+          remainingBalance: loanApplication.remainingBalance || 45000,
+          interestRate: loanApplication.interestRate || '12.5',
+          interestType: loanApplication.interestType || 'Fixed',
+          totalInterest: loanApplication.totalInterest || 7500,
+          processingFee: loanApplication.processingFee || 500,
+          totalPayment: loanApplication.totalPayment || 57500,
+          netRelease: loanApplication.netRelease || 49500,
+          paymentsCompleted: loanApplication.transactions.length,
+          paymentsRemaining: parseInt(loanApplication.term.replace(' months', '')) - loanApplication.transactions.length,
+      };
+
+      setLoanDetails(details);
+      };
+
     } else {
       // Default data for testing
       setLoanDetails({
@@ -433,6 +473,7 @@ const PayNowScreen = ({ navigation, route }) => {
           transactions={transactions}
           onClose={() => setShowPaymentMethodModal(false)}
           onPaymentComplete={handlePaymentComplete}
+          navigation={navigation}
         />
       </Modal>
 
@@ -527,7 +568,7 @@ const PayNowScreen = ({ navigation, route }) => {
 };
 
 // Payment Method Modal Content Component
-const PaymentMethodModalContent = ({ loanDetails, paymentAmount, transactions, onClose, onPaymentComplete }) => {
+const PaymentMethodModalContent = ({ loanDetails, paymentAmount, transactions, onClose, onPaymentComplete, navigation }) => {
   const [selectedMethod, setSelectedMethod] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentStep, setPaymentStep] = useState('select'); // 'select', 'qr', 'form', 'receipt'
@@ -537,6 +578,20 @@ const PaymentMethodModalContent = ({ loanDetails, paymentAmount, transactions, o
   const [bankForm, setBankForm] = useState({ accountNumber: '', accountName: '', bankBranch: '', referenceNumber: '' });
   const [cardForm, setCardForm] = useState({ cardNumber: '', cardholderName: '', expiryDate: '', cvv: '' });
   const [receiptImage, setReceiptImage] = useState(null);
+  const [walletBalance, setWalletBalance] = useState(0);
+
+  // Fetch wallet balance for lora wallet
+  useEffect(() => {
+    const fetchWalletBalance = async () => {
+      const { success, balance } = await GET_WALLET_BALANCE();
+
+      if (success) {
+        setWalletBalance(balance);
+      };
+    };
+
+    fetchWalletBalance();
+  } , []);
 
   const paymentMethods = [
     { id: 'wallet', name: 'Lora Wallet', icon: 'account-balance-wallet', category: 'wallet', fee: 0, description: 'Instant payment with no fees' },
@@ -598,19 +653,37 @@ const PaymentMethodModalContent = ({ loanDetails, paymentAmount, transactions, o
       return;
     }
 
-    // For e-wallets, show QR code
+    // Check if card form is filled
+    if (selectedMethod.category === 'card') {
+      if (!validateForm()) return;
+    };
+    
+    // For ewallet, banks and cards
+    Alert.alert(
+      'Confirm Payment',
+      'Process payment of ₱' + (paymentAmount + selectedMethod.fee).toFixed(2) + ' via ' + selectedMethod.name + '?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Confirm', onPress: () => executePayment(selectedMethod.id) }]
+    )
+    return;
+
+    /*
+    This code does nothing for now...
+
+    // For ewallet
     if (selectedMethod.id === 'gcash' || selectedMethod.id === 'maya') {
       setPaymentStep('qr');
       return;
     }
 
-    // For banks, show receipt upload
+    // For banks
     if (selectedMethod.category === 'bank') {
       setPaymentStep('receipt');
       return;
     }
 
-    // For cards, validate and proceed
+    // For cards
     if (selectedMethod.category === 'card') {
       if (!validateForm()) return;
       Alert.alert(
@@ -622,6 +695,7 @@ const PaymentMethodModalContent = ({ loanDetails, paymentAmount, transactions, o
         ]
       );
     }
+    */
   };
 
   const handleUploadReceipt = () => {
@@ -677,37 +751,104 @@ const PaymentMethodModalContent = ({ loanDetails, paymentAmount, transactions, o
     );
   };
 
-  const executePayment = () => {
+  const executePayment = async (selectedMethodArg = "") => {
     setIsProcessing(true);
 
-    setTimeout(() => {
-      const transactionId = `TXN-${Date.now()}`;
-      const currentDate = new Date();
-      
-      const newTransaction = {
-        id: transactionId,
-        type: 'Payment',
-        amount: paymentAmount.toFixed(2),
-        fee: selectedMethod.fee,
-        totalAmount: (paymentAmount + selectedMethod.fee).toFixed(2),
-        date: currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        time: currentDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
-        status: selectedMethod.id === 'wallet' ? 'Completed' : 'Pending',
-        loanId: loanDetails.applicationId,
-        transactionId: transactionId,
-        paymentMethod: selectedMethod.name,
-        lender: loanDetails.lender,
-        loanType: loanDetails.loanType,
-        isPending: selectedMethod.id !== 'wallet',
-        referenceNumber: selectedMethod.category === 'ewallet' ? transactionCode : selectedMethod.category === 'bank' ? bankForm.referenceNumber : null,
-        processingMessage: selectedMethod.id !== 'wallet' 
-          ? `Your payment via ${selectedMethod.name} is being processed. This may take 1-3 business days.`
-          : null,
+    // EWALLET, BANKS and CARDS
+    if (selectedMethodArg !== "") {
+      let card = null;
+      let method = selectedMethodArg;
+      const pay_amount = paymentAmount + selectedMethod.fee;
+
+      if (["visa", "mastercard"].includes(selectedMethodArg)) {
+        card = {
+          card_number: cardForm.cardNumber.replace(/\s/g, ''), // String
+          exp_month: parseInt(cardForm.expiryDate.split("/")[0]), // Number
+          exp_year: parseInt(cardForm.expiryDate.split("/")[1]), // Number
+          cvc: cardForm.cvv // String
+        }
       };
 
+      if (method === "maya") {
+        method = "paymaya";
+      };
+
+      const { success, message, nextActionUrls, status } = await CREATE_PAYMENT(method, pay_amount, card, loanDetails.applicationId);
+
+      console.log(nextActionUrls, status);
+
+      if (!success) {
+        setIsProcessing(false);
+        Alert.alert('Error', message);
+        return;
+      };
+
+      if (status !== "Pending") {
+        Alert.alert('Success', 'Payment submitted successfully',
+          [
+            { text: 'OK', onPress: () => navigation.navigate("Dashboard") }
+          ]
+        );
+
+        setIsProcessing(false);
+        return;
+      };
+
+      Alert.alert('Success', 'Payment submitted successfully',
+        [
+          { 
+            text: 'OK', onPress: () => {
+              Linking.openURL(nextActionUrls.redirect.url);
+              navigation.navigate("Dashboard")
+            } 
+          }
+        ]
+      );
+
       setIsProcessing(false);
-      onPaymentComplete(newTransaction);
-    }, 2000);
+      return;
+    };
+
+    if (walletBalance < paymentAmount + selectedMethod.fee) {
+      setIsProcessing(false);
+      Alert.alert('Error', 'Insufficient wallet balance');
+      return;
+    };
+    
+    const { success, message, transactionId, referenceNumber } = await WALLET_PAYMENT(loanDetails.applicationId);
+    
+    if (!success) {
+      setIsProcessing(false);
+      Alert.alert('Error', message);
+      return;
+    };
+
+    const currentDate = new Date();
+    
+    const newTransaction = {
+      id: transactionId,
+      type: 'Payment',
+      amount: paymentAmount.toFixed(2),
+      fee: selectedMethod.fee,
+      totalAmount: (paymentAmount + selectedMethod.fee).toFixed(2),
+      date: currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      time: currentDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
+      status: selectedMethod.id === 'wallet' ? 'Completed' : 'Pending',
+      loanId: loanDetails.applicationId,
+      transactionId: transactionId,
+      paymentMethod: selectedMethod.name,
+      lender: loanDetails.lender,
+      loanType: loanDetails.loanType,
+      isPending: selectedMethod.id !== 'wallet',
+      referenceNumber,
+      processingMessage: selectedMethod.id !== 'wallet' 
+        ? `Your payment via ${selectedMethod.name} is being processed. This may take 1-3 business days.`
+        : null,
+    };
+
+    setIsProcessing(false);
+    onPaymentComplete(newTransaction);
+
   };
 
   const renderForm = () => {
@@ -723,7 +864,7 @@ const PaymentMethodModalContent = ({ loanDetails, paymentAmount, transactions, o
             <Text style={styles.walletSubtext}>Instant payment with no fees</Text>
             <View style={styles.walletBalance}>
               <Text style={styles.balanceLabel}>Available Balance</Text>
-              <Text style={styles.balanceAmount}>₱12,500.75</Text>
+              <Text style={styles.balanceAmount}>₱{walletBalance}</Text>
             </View>
           </View>
         </View>

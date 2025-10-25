@@ -1,0 +1,161 @@
+import client from "../lib/apolloClient";
+import { SUBMIT_LOAN_APPLICATION as SUBMIT_LOAN_APPLICATION_MUTATE } from "../graphql/mutations/loanApplications";
+import { GET_LOANS_DATA_QUERY, GET_LOAN_TRANSACTIONS_QUERY, GET_CURRENT_LOAN_DATA_QUERY } from "../graphql/queries/fetchLoans";
+import { getToken } from "../lib/cookies";
+
+const SUBMIT_LOAN_APPLICATION = async (loanData) => {
+  try {    
+      const token = await getToken();
+    
+      const { data } = await client.mutate({
+        mutation: SUBMIT_LOAN_APPLICATION_MUTATE,
+        variables: { data: loanData },
+        fetchPolicy: 'no-cache',
+        context: {
+          headers: {
+            Authorization: token
+          }
+        }
+      })
+    
+      const { success, message, company, loan, numberOfDocs } = data.submitLoanApplication;
+
+      if(!success) {
+        return {
+          success: false,
+          message
+        }
+      }
+
+      return {
+        success: true,
+        message,
+        companyDetails: company,
+        loan,
+        numberOfDocs
+      }
+  } catch (err) {
+    return {
+      success: false,
+      message: err.message
+    }
+  }
+}
+
+const GET_LOANS_DATA = async () => {
+  try {
+    const token = await getToken();
+
+    const { data } = await client.query({
+      query: GET_LOANS_DATA_QUERY,
+      fetchPolicy: 'no-cache',
+      context: {
+        headers: {
+          Authorization: token
+        }
+      }
+    });
+
+    const { success, message, loans } = data.getUserLoans;
+
+    if(!success) {
+      return {
+        success: false,
+        message
+      }
+    };
+
+    return {
+      success: true,
+      message,
+      loans
+    };
+
+  } catch(err) {
+    return {
+      success: false,
+      message: err.message
+    };
+  };
+};
+
+const GET_LOAN_TRANSACTIONS = async () => {
+  try {
+    const token = await getToken();
+
+    const { data } = await client.query({
+      query: GET_LOAN_TRANSACTIONS_QUERY,
+      fetchPolicy: 'no-cache',
+      context: {
+        headers: {
+          Authorization: token
+        }
+      }
+    });
+
+    const { success, message, loanTransactions } = data.getLoanTransactions;
+
+    if(!success) {
+      return {
+        success: false,
+        message
+      }
+    };
+
+    return {
+      success,
+      message,
+      loanTransactions
+    };
+
+  } catch (err) {
+    return {
+      success: false,
+      message: err.message
+    };
+  }
+};
+
+const GET_CURRENT_LOAN_DATA = async () => {
+  try {
+    const token = await getToken();
+
+    const { data } = await client.query({
+      query: GET_CURRENT_LOAN_DATA_QUERY,
+      fetchPolicy: 'no-cache',
+      context: {
+        headers: {
+          Authorization: token
+        }
+      }
+    });
+
+    const { success, message, currentLoan } = data.getUserCurrentLoan;
+
+    if(!success) {
+      return {
+        success: false,
+        message,
+        currentLoan: {}
+      };
+    };
+
+    return {
+      success,
+      message,
+      currentLoan
+    };
+
+  } catch (err) {
+    return {
+      success: false,
+      message: err.message
+    };
+  };
+};
+
+export { 
+  SUBMIT_LOAN_APPLICATION, 
+  GET_LOANS_DATA, GET_LOAN_TRANSACTIONS,
+  GET_CURRENT_LOAN_DATA 
+};

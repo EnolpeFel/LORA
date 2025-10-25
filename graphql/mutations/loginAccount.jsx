@@ -5,6 +5,8 @@ const LOGIN_ACCOUNT = gql`
     loginAccount(phone: $phone, pinCode: $pinCode) {
       success
       message
+      token
+      name
     }
   }
 `;
