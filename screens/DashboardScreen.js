@@ -475,7 +475,7 @@ import { formatDistanceToNow } from "date-fns";
       fetchRecentLoanTransactions();
       fetchWalletTransactions();
       fetchWalletBalance();
-    }, [toggleReload, route.params])
+    }, [toggleReload, route.params, navigation]);
 
     // Simple Profile Screen Component
     const ProfileScreen = ({ onBack, onLogout }) => {
