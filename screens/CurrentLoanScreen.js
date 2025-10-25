@@ -198,7 +198,7 @@ const CurrentLoanScreen = ({ navigation }) => {
       const { message, success, currentLoan } = await GET_CURRENT_LOAN_DATA();
 
       if (success) {
-        const totalPayment = currentLoan.transactions.reduce((total, transaction) => total + transaction.amount, 0);
+        const totalPayment = currentLoan.transactions.reduce((total, transaction) => parseFloat(total) + parseFloat(transaction.amount), 0);
         const paymentsCompleted = currentLoan.transactions.length;
         const paymentsRemaining = parseInt(currentLoan.terms.replace(' months', '')) - paymentsCompleted;
 
