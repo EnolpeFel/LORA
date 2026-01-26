@@ -208,8 +208,8 @@ if (!value) error = 'Loan amount is required';
 else if (isNaN(value) || parseFloat(value) <= 0) error = 'Enter a valid amount';
 else if (selectedCompany) {
 const company = companies.find(c => c.id === selectedCompany);
-if (parseFloat(value) < company.minAmount) error = `Minimum amount is \u20b1${company.minAmount.toLocaleString()}`;
-if (parseFloat(value) > company.maxAmount) error = `Maximum amount is \u20b1${company.maxAmount.toLocaleString()}`;
+if (parseFloat(value) < company.minAmount) error = `Minimum amount is ₱${company.minAmount.toLocaleString()}`;
+if (parseFloat(value) > company.maxAmount) error = `Maximum amount is ₱${company.maxAmount.toLocaleString()}`;
 }
 break;
 case 'terms':
@@ -315,7 +315,7 @@ const termError = validateField('terms', terms);
 if (!amountError || !termError) {
 Alert.alert(
 'Invalid Input',
-`Please ensure your loan amount is between \u20b1${company.minAmount.toLocaleString()} and \u20b1${company.maxAmount.toLocaleString()} and term is between ${company.minTerm} and ${company.maxTerm} months for this lender.`,
+`Please ensure your loan amount is between ₱${company.minAmount.toLocaleString()} and ₱${company.maxAmount.toLocaleString()} and term is between ${company.minTerm} and ${company.maxTerm} months for this lender.`,
 [{ text: 'OK' }]
 );
 return;
@@ -494,15 +494,15 @@ const loanDetails = calculateLoanDetails(selectedCompanyData);
 const applicationData = {
 id: 'L-' + Math.random().toString(36).substr(2, 8).toUpperCase(),
 type: loanType === 'new' ? 'New Loan' : 'Bonus Loan',
-amount: `\u20b1${parseFloat(loanAmount).toLocaleString()}`,
+amount: `₱${parseFloat(loanAmount).toLocaleString()}`,
 terms: `${terms} months`,
-monthlyPayment: `\u20b1${loanDetails.monthlyPayment.toFixed(2)}`,
+monthlyPayment: `₱${loanDetails.monthlyPayment.toFixed(2)}`,
 lender: selectedCompanyData.name,
 status: 'Processing',
 date: new Date().toLocaleDateString(),
 timestamp: new Date().toISOString(),
 purpose: purpose,
-monthlyIncome: `\u20b1${parseFloat(monthlyIncome).toLocaleString()}`,
+monthlyIncome: `₱${parseFloat(monthlyIncome).toLocaleString()}`,
 collateral: collateral,
 documents: documents.length,
 // Additional details for the receipt
@@ -635,7 +635,7 @@ const renderLoanDetails = () => (
 <Text style={styles.stepSubheader}>Provide information about your loan request</Text>
 
 <View style={styles.formGroup}>
-<Text style={styles.label}>Loan Amount (\u20b1)</Text>
+<Text style={styles.label}>Loan Amount (₱)</Text>
 <View style={[styles.inputContainer, errors.loanAmount && touched.loanAmount && styles.inputError]}>
 <TextInput
 style={styles.input}
@@ -672,14 +672,14 @@ onBlur={() => handleBlur('terms', terms)}
 <View style={styles.calculationBox}>
 <Text style={styles.calculationTitle}>Estimated Monthly Payment:</Text>
 <Text style={styles.calculationAmount}>
-\u20b1{calculateEstimatedPayment().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+₱{calculateEstimatedPayment().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
 </Text>
 <Text style={styles.calculationNote}>This is an estimate. Final amount may vary.</Text>
 </View>
 )}
 
 <View style={styles.formGroup}>
-<Text style={styles.label}>Monthly Income (\u20b1)</Text>
+<Text style={styles.label}>Monthly Income (₱)</Text>
 <View style={[styles.inputContainer, errors.monthlyIncome && touched.monthlyIncome && styles.inputError]}>
 <TextInput
 style={styles.input}
@@ -827,7 +827,7 @@ Processing: <Text style={styles.detailHighlight}>{company.processingTime}</Text>
 <Text style={styles.loanCalculationTitle}>Loan Breakdown</Text>
 <View style={styles.loanCalculationRow}>
 <Text>Loan Amount:</Text>
-<Text>\u20b1{parseFloat(loanAmount).toLocaleString()}</Text>
+<Text>₱{parseFloat(loanAmount).toLocaleString()}</Text>
 </View>
 <View style={styles.loanCalculationRow}>
 <Text>Terms:</Text>
@@ -835,15 +835,15 @@ Processing: <Text style={styles.detailHighlight}>{company.processingTime}</Text>
 </View>
 <View style={styles.loanCalculationRow}>
 <Text>Interest ({loanDetails.interestRate.toFixed(1)}%):</Text>
-<Text>\u20b1{loanDetails.interest.toFixed(2)}</Text>
+<Text>₱{loanDetails.interest.toFixed(2)}</Text>
 </View>
 <View style={styles.loanCalculationRow}>
 <Text>Monthly Payment:</Text>
-<Text>\u20b1{loanDetails.monthlyPayment.toFixed(2)}</Text>
+<Text>₱{loanDetails.monthlyPayment.toFixed(2)}</Text>
 </View>
 <View style={[styles.loanCalculationRow, styles.netReleaseRow]}>
 <Text>Net Release:</Text>
-<Text style={styles.netReleaseText}>\u20b1{loanDetails.netRelease.toFixed(2)}</Text>
+<Text style={styles.netReleaseText}>₱{loanDetails.netRelease.toFixed(2)}</Text>
 </View>
 </View>
 )}
@@ -928,7 +928,7 @@ onRequestClose={() => setModalVisible(false)}
 </View>
 <View style={styles.modalDetailRow}>
 <Ionicons name="wallet-outline" size={16} color="#8B5CF6" />
-<Text style={styles.modalDetailText}>Processing Fee: \u20b1{selectedCompanyInfo.processingFee}</Text>
+<Text style={styles.modalDetailText}>Processing Fee: ₱{selectedCompanyInfo.processingFee}</Text>
 </View>
 
 <Text style={styles.modalSectionTitle}>Requirements:</Text>
@@ -1112,7 +1112,7 @@ onPress={() => viewDocument(doc)}
 
 <View style={styles.reviewItem}>
 <Text style={styles.reviewLabel}>Loan Amount:</Text>
-<Text style={styles.reviewValue}>\u20b1{parseFloat(loanAmount).toLocaleString()}</Text>
+<Text style={styles.reviewValue}>₱{parseFloat(loanAmount).toLocaleString()}</Text>
 </View>
 
 <View style={styles.reviewItem}>
@@ -1122,7 +1122,7 @@ onPress={() => viewDocument(doc)}
 
 <View style={styles.reviewItem}>
 <Text style={styles.reviewLabel}>Monthly Income:</Text>
-<Text style={styles.reviewValue}>\u20b1{parseFloat(monthlyIncome).toLocaleString()}</Text>
+<Text style={styles.reviewValue}>₱{parseFloat(monthlyIncome).toLocaleString()}</Text>
 </View>
 
 <View style={styles.reviewItem}>
