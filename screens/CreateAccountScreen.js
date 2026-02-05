@@ -16,9 +16,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
-import { SEND_MPIN, VERIFY_MPIN } from "../graphql/queries/sendVerifyMpin";
-import { CREATE_ACCOUNT } from '../graphql/mutations/createAccount';
-import client from "../lib/apolloClient";
 
 const { width, height } = Dimensions.get('window');
 
@@ -85,39 +82,7 @@ const CreateAccountScreen = ({ navigation }) => {
 
   // Screen handlers
   const handleNext = async () => {
-    if (!phoneNumber || phoneNumber.length < 13) { // +63 plus 10 digits
-      Alert.alert('Error', 'Please enter a valid Philippine mobile number (+63XXXXXXXXXX)');
-      return;
-    }
-    if (!agreedToTerms) {
-      Alert.alert('Error', 'Please agree to the terms');
-      return;
-    }
-
-    // Send MPIN
-    try {
-      const { data } = await client.query({
-        query: SEND_MPIN,
-        variables: { phone: phoneNumber },
-        fetchPolicy: 'no-cache'
-      })
-
-      const { success, message } = data.sendMPIN;
-
-      // TO DO: Add loading and success message in UI
-      // This is a example
-      console.log(success, message); 
-
-      if (!success) {
-        return;
-      };
-
-    } catch (err) {
-      // TO DO: Add error message in UI
-      console.log(err);
-      return;
-    }
-
+    // Bypass all validation - proceed directly
     setScreen('verification');
     setTimer(300);
     setCanResend(false);
@@ -125,39 +90,7 @@ const CreateAccountScreen = ({ navigation }) => {
   };
 
   const handleVerify = async () => {
-    const enteredMpin = mpin.join('');
-    if (enteredMpin.length !== 6) {
-      Alert.alert('Error', 'Please enter 6-digit MPIN');
-      return;
-    }
-
-    // Verify MPIN
-    try {
-      const { data } = await client.query({
-        query: VERIFY_MPIN,
-        variables: { phone: phoneNumber, code: enteredMpin },
-        fetchPolicy: 'no-cache'
-      });
-
-      const { success, message } = data.verifyMPIN;
-
-      // TO DO: Add loading and success message in UI
-      // This is a example
-      console.log(success, message);
-
-      if (!success) {
-        Alert.alert('Error', 'Invalid MPIN. Please try again');
-        setMpin(['', '', '', '', '', '']);
-        return;
-      };
-
-    } catch (err) {
-      // TO DO: Add error message in UI
-      console.log(err);
-      setMpin(['', '', '', '', '', '']);
-      return;
-    };
-
+    // Bypass MPIN verification - proceed directly
     setScreen('details');
   };
 
@@ -172,30 +105,12 @@ const CreateAccountScreen = ({ navigation }) => {
   };
 
   const handleSubmitDetails = () => {
-    if (!userDetails.firstName || !userDetails.lastName || !userDetails.birthdate) {
-      Alert.alert('Error', 'Please fill in all required fields');
-      return;
-    }
-    if (!validateBirthdate()) {
-      Alert.alert('Error', 'Please enter a valid birthdate (MM/DD/YYYY)');
-      return;
-    }
-    if (!userDetails.agreed) {
-      Alert.alert('Error', 'Please confirm the information is true and complete');
-      return;
-    }
+    // Bypass validation - proceed directly
     setScreen('address');
   };
 
   const handleSubmitAddress = () => {
-    if (!address.country || !address.province || !address.municipality || !address.barangay || !address.street) {
-      Alert.alert('Error', 'Please fill in all address fields');
-      return;
-    }
-    if (!address.agreed) {
-      Alert.alert('Error', 'Please confirm the address information is true');
-      return;
-    }
+    // Bypass validation - proceed directly
     setScreen('pin');
   };
 
@@ -237,87 +152,13 @@ const CreateAccountScreen = ({ navigation }) => {
   };
 
   const handleSubmitPin = async () => {
-    const enteredPin = pin.join('');
-    const enteredConfirmPin = confirmPin.join('');
-
-    if (enteredPin.length !== 4 || enteredConfirmPin.length !== 4) {
-      Alert.alert('Error', 'Please complete both PIN fields');
-      return;
-    }
-
-    if (enteredPin !== enteredConfirmPin) {
-      Alert.alert('Error', 'PINs do not match');
-      return;
-    }
-
-    // Compile the data
-    const {  
-      firstName,
-      middleName,
-      lastName,
-      suffix,
-      birthdate,
-      gender,
-      nationality,
-    } = userDetails;
-
-    const {
-      country,
-      province,
-      municipality,
-      barangay,
-      street,
-    } = address;
-
-    // Convert birthdate into ISO format for API YYYY-MM-DD
-    const dateParts = birthdate.split('/');
-    const birthdateISO = `${dateParts[2]}-${dateParts[0]}-${dateParts[1]}`;
-
-    const compiledData = {
-      phone: phoneNumber,
-      fname: firstName,
-      mname: middleName !== "" ? middleName : null,
-      lname: lastName,
-      suffix: suffix !== "" ? suffix : null,
-      birthdate: new Date(birthdateISO),
-      gender: gender !== "" ? gender : null,
-      nationality: nationality !== "" ? nationality : null,
-      country,
-      province,
-      municipality,
-      barangay,
-      address_text: street,
-      pinCode: pin.join('')
-    }
-
-    // Create account mutation
-    try {
-      const { data } = await client.mutate({
-        mutation: CREATE_ACCOUNT,
-        variables: { data: compiledData },
-        fetchPolicy: 'no-cache'
-      })
-
-      const {  success, message } = data.createAccount;
-
-      // TO DO: Add loading and success message in UI
-      // This is a example
-
-      console.log(success, message);
-
-      // TO DO: Add error message in UI
-      if (!success) {
-        return;
+    // Bypass all validation and API calls - proceed to face recognition
+    Alert.alert('Success', 'Account created successfully! Set up face recognition for secure login.', [
+      {
+        text: 'OK',
+        onPress: () => navigation.navigate('FaceRecognition')
       }
-
-    } catch (err) {
-      // TO DO: Add error message in UI
-      console.log(err);
-      return;
-    }
-
-    // Navigate to Dashboard on successful account creation
-    navigation.navigate('Dashboard');
+    ]);
   };
 
   // Helper functions
@@ -556,9 +397,8 @@ const CreateAccountScreen = ({ navigation }) => {
             </View>
 
             <TouchableOpacity
-              style={[styles.nextButton, (pin.some(d => d === '') || confirmPin.some(d => d === '') && styles.disabledButton)]}
+              style={styles.nextButton}
               onPress={handleSubmitPin}
-              disabled={pin.some(d => d === '') || confirmPin.some(d => d === '')}
             >
               <Text style={styles.nextButtonText}>Complete Registration</Text>
             </TouchableOpacity>
@@ -784,9 +624,8 @@ const CreateAccountScreen = ({ navigation }) => {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.nextButton, (!address.country || !address.province || !address.municipality || !address.barangay || !address.street || !address.agreed) && styles.disabledButton]}
+                style={styles.nextButton}
                 onPress={handleSubmitAddress}
-                disabled={!address.country || !address.province || !address.municipality || !address.barangay || !address.street || !address.agreed}
               >
                 <Text style={styles.nextButtonText}>Next</Text>
               </TouchableOpacity>
@@ -966,9 +805,8 @@ const CreateAccountScreen = ({ navigation }) => {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.nextButton, (!userDetails.firstName || !userDetails.lastName || !userDetails.birthdate || !userDetails.agreed) && styles.disabledButton]}
+                style={styles.nextButton}
                 onPress={handleSubmitDetails}
-                disabled={!userDetails.firstName || !userDetails.lastName || !userDetails.birthdate || !userDetails.agreed}
               >
                 <Text style={styles.nextButtonText}>Next</Text>
               </TouchableOpacity>
@@ -1024,9 +862,8 @@ const CreateAccountScreen = ({ navigation }) => {
             </View>
 
             <TouchableOpacity
-              style={[styles.nextButton, mpin.some(digit => digit === '') && styles.disabledButton]}
+              style={styles.nextButton}
               onPress={handleVerify}
-              disabled={mpin.some(digit => digit === '')}
             >
               <Text style={styles.nextButtonText}>Verify</Text>
             </TouchableOpacity>
@@ -1052,29 +889,29 @@ const CreateAccountScreen = ({ navigation }) => {
             <View style={styles.phoneInputWrapper}>
               <Text style={styles.flagEmoji}>🇵🇭</Text>
               <TextInput
-  style={styles.phoneInput}
-  value={phoneNumber}
-  onChangeText={(text) => {
-    // Ensure it starts with +63
-    if (text.startsWith('+63')) {
-      // Only allow numbers and limit to 13 characters total (+63 + 10 digits)
-      const cleaned = text.replace(/[^0-9+]/g, '');
-      setPhoneNumber(cleaned.substring(0, 13));
-    } else if (text === '') {
-      setPhoneNumber('+63');
-    } else if (text.startsWith('+') && !text.startsWith('+63')) {
-      // If user tries to enter a different country code, force +63
-      setPhoneNumber('+63' + text.replace(/[^0-9]/g, '').substring(0, 10));
-    } else {
-      // If user starts typing numbers without +, prepend +63
-      const numbers = text.replace(/[^0-9]/g, '');
-      setPhoneNumber('+63' + numbers.substring(0, 10));
-    }
-  }}
-  placeholder="+639123456789"
-  keyboardType="phone-pad"
-  maxLength={13}
-/>
+                style={styles.phoneInput}
+                value={phoneNumber}
+                onChangeText={(text) => {
+                  // Ensure it starts with +63
+                  if (text.startsWith('+63')) {
+                    // Only allow numbers and limit to 13 characters total (+63 + 10 digits)
+                    const cleaned = text.replace(/[^0-9+]/g, '');
+                    setPhoneNumber(cleaned.substring(0, 13));
+                  } else if (text === '') {
+                    setPhoneNumber('+63');
+                  } else if (text.startsWith('+') && !text.startsWith('+63')) {
+                    // If user tries to enter a different country code, force +63
+                    setPhoneNumber('+63' + text.replace(/[^0-9]/g, '').substring(0, 10));
+                  } else {
+                    // If user starts typing numbers without +, prepend +63
+                    const numbers = text.replace(/[^0-9]/g, '');
+                    setPhoneNumber('+63' + numbers.substring(0, 10));
+                  }
+                }}
+                placeholder="+639123456789"
+                keyboardType="phone-pad"
+                maxLength={13}
+              />
             </View>
           </View>
 
@@ -1092,9 +929,8 @@ const CreateAccountScreen = ({ navigation }) => {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.nextButton, (phoneNumber.length < 13 || !agreedToTerms) && styles.disabledButton]}
+            style={styles.nextButton}
             onPress={handleNext}
-            disabled={phoneNumber.length < 13 || !agreedToTerms}
           >
             <Text style={styles.nextButtonText}>Next</Text>
           </TouchableOpacity>
