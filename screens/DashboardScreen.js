@@ -1,0 +1,3075 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  Dimensions,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  Modal,
+  TextInput,
+  Alert,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { MaterialIcons } from '@expo/vector-icons';
+
+const { width } = Dimensions.get('window');
+
+const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+
+const DashboardScreen = ({ navigation, route }) => {
+  const [showProfile, setShowProfile] = useState(false);
+
+  const [hasUnreadNotifications, setHasUnreadNotifications] = useState(true);
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  const [showCreditScoreModal, setShowCreditScoreModal] = useState(false);
+  const [showLoanStatusModal, setShowLoanStatusModal] = useState(false);
+  const [showHowToLoanModal, setShowHowToLoanModal] = useState(false);
+
+  const [currentDateTime, setCurrentDateTime] = useState('');
+  const [loanApplicationStatus, setLoanApplicationStatus] = useState(null);
+
+  const [activeTab, setActiveTab] = useState('pending');
+
+  const [walletBalance, setWalletBalance] = useState(12500.75);
+  const [showWalletActions, setShowWalletActions] = useState(false);
+
+  // Wallet feature modals
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [showPayQRModal, setShowPayQRModal] = useState(false);
+  const [showCashInModal, setShowCashInModal] = useState(false);
+  const [showTransactionHistory, setShowTransactionHistory] = useState(false);
+
+  // Enhanced Transfer form states
+  const [transferAmount, setTransferAmount] = useState('');
+  const [recipientName, setRecipientName] = useState('');
+  const [recipientNumber, setRecipientNumber] = useState('');
+  const [recipientAccountNumber, setRecipientAccountNumber] = useState('');
+  const [transferNote, setTransferNote] = useState('');
+  const [selectedBank, setSelectedBank] = useState('');
+  const [transferFee, setTransferFee] = useState(0);
+  const [totalAmount, setTotalAmount] = useState(0);
+  const [transferStep, setTransferStep] = useState(1); // 1: Select Bank, 2: Fill Details, 3: Confirm
+
+  // Cash In form states
+  const [cashInAmount, setCashInAmount] = useState('');
+  const [selectedCashInMethod, setSelectedCashInMethod] = useState('');
+
+  // QR Payment states
+  const [qrAmount, setQrAmount] = useState('');
+  const [merchantName, setMerchantName] = useState('Sample Merchant');
+
+  // Transaction history
+  const [walletTransactions, setWalletTransactions] = useState([
+    {
+      id: 1,
+      type: 'Transfer Out',
+      amount: -2500.0,
+      recipient: 'Juan Dela Cruz',
+      recipientNumber: '+63 912 345 6789',
+      bank: 'GCash',
+      date: new Date().toISOString(),
+      status: 'Completed',
+      note: 'Payment for services',
+    },
+    {
+      id: 2,
+      type: 'Cash In',
+      amount: 5000.0,
+      source: 'GCash',
+      date: new Date(Date.now() - 86400000).toISOString(),
+      status: 'Completed',
+    },
+    {
+      id: 3,
+      type: 'QR Payment',
+      amount: -850.0,
+      merchant: 'Coffee Shop',
+      date: new Date(Date.now() - 172800000).toISOString(),
+      status: 'Completed',
+    },
+    {
+      id: 4,
+      type: 'Loan Disbursement',
+      amount: 10000.0,
+      date: new Date(Date.now() - 259200000).toISOString(),
+      status: 'Completed',
+    },
+  ]);
+
+  // Enhanced Banks and e-wallets for transfer with fees and processing times
+  const banks = useMemo(
+    () => [
+      {
+        id: 'gcash',
+        name: 'GCash',
+        icon: '💳',
+        type: 'e-wallet',
+        fee: 0,
+        processing: 'Instant',
+        color: '#008C5A',
+        description: 'Send to GCash mobile number',
+        placeholder: '0912 345 6789',
+        inputType: 'mobile',
+      },
+      {
+        id: 'maya',
+        name: 'Maya',
+        icon: '💳',
+        type: 'e-wallet',
+        fee: 0,
+        processing: 'Instant',
+        color: '#0056A8',
+        description: 'Send to Maya mobile number',
+        placeholder: '0912 345 6789',
+        inputType: 'mobile',
+      },
+      {
+        id: 'bpi',
+        name: 'BPI',
+        icon: '🏦',
+        type: 'bank',
+        fee: 25,
+        processing: '1-2 hours',
+        color: '#C40B2C',
+        description: 'Send to BPI account',
+        placeholder: '1234 5678 9012',
+        inputType: 'account',
+      },
+      {
+        id: 'bdo',
+        name: 'BDO',
+        icon: '🏦',
+        type: 'bank',
+        fee: 25,
+        processing: '1-2 hours',
+        color: '#9E0B0F',
+        description: 'Send to BDO account',
+        placeholder: '1234 5678 9012',
+        inputType: 'account',
+      },
+      {
+        id: 'metrobank',
+        name: 'Metrobank',
+        icon: '🏦',
+        type: 'bank',
+        fee: 25,
+        processing: '1-2 hours',
+        color: '#0F4B9C',
+        description: 'Send to Metrobank account',
+        placeholder: '1234 5678 9012',
+        inputType: 'account',
+      },
+      {
+        id: 'unionbank',
+        name: 'UnionBank',
+        icon: '🏦',
+        type: 'bank',
+        fee: 15,
+        processing: 'Instant',
+        color: '#FF6B00',
+        description: 'Send to UnionBank account',
+        placeholder: '1234 5678 9012',
+        inputType: 'account',
+      },
+      {
+        id: 'landbank',
+        name: 'LandBank',
+        icon: '🏦',
+        type: 'bank',
+        fee: 20,
+        processing: '1-2 hours',
+        color: '#0055A5',
+        description: 'Send to LandBank account',
+        placeholder: '1234 5678 9012',
+        inputType: 'account',
+      },
+      {
+        id: 'securitybank',
+        name: 'Security Bank',
+        icon: '🏦',
+        type: 'bank',
+        fee: 25,
+        processing: '1-2 hours',
+        color: '#FFCD00',
+        description: 'Send to Security Bank account',
+        placeholder: '1234 5678 9012',
+        inputType: 'account',
+      },
+    ],
+    []
+  );
+
+  const [notifications, setNotifications] = useState([
+    {
+      id: 1,
+      title: 'Payment Received',
+      message: 'Your payment of Php 5,250.00 has been processed',
+      time: '2 hours ago',
+      read: false,
+    },
+    {
+      id: 2,
+      title: 'Loan Approved',
+      message: 'Your loan application has been approved',
+      time: '1 day ago',
+      read: true,
+    },
+  ]);
+
+  // Credit score data (single source of truth)
+  const creditScore = 640;
+
+  const { creditStatus, creditStatusColor } = useMemo(() => {
+    if (creditScore >= 670) return { creditStatus: 'Excellent', creditStatusColor: '#10B981' };
+    if (creditScore >= 580) return { creditStatus: 'Fair', creditStatusColor: '#F59E0B' };
+    return { creditStatus: 'Poor', creditStatusColor: '#EF4444' };
+  }, [creditScore]);
+
+  const scoreNeedleRotation = useMemo(() => {
+    // Score range: 300 - 850 (550 points). Meter sweep: 270 degrees.
+    const t = clamp((creditScore - 300) / 550, 0, 1);
+    return -135 + t * 270;
+  }, [creditScore]);
+
+  // Cash In methods - Only Maya and GCash
+  const cashInMethods = useMemo(
+    () => [
+      {
+        id: 'gcash',
+        name: 'GCash',
+        icon: '💳',
+        fee: 0,
+        description: 'Instant transfer from your GCash wallet',
+        color: '#008C5A',
+      },
+      {
+        id: 'maya',
+        name: 'Maya',
+        icon: '💳',
+        fee: 0,
+        description: 'Instant transfer from your Maya account',
+        color: '#0056A8',
+      },
+    ],
+    []
+  );
+
+  // Calculate transfer fee and total amount
+  useEffect(() => {
+    if (selectedBank && transferAmount) {
+      const bank = banks.find(b => b.id === selectedBank);
+      const amount = parseFloat(transferAmount) || 0;
+      const fee = bank ? bank.fee : 0;
+      setTransferFee(fee);
+      setTotalAmount(amount + fee);
+    } else {
+      setTransferFee(0);
+      setTotalAmount(0);
+    }
+  }, [selectedBank, transferAmount, banks]);
+
+  // Enhanced Transfer Function
+  const handleTransfer = () => {
+    const amount = parseFloat(transferAmount);
+
+    if (!amount || amount <= 0) {
+      Alert.alert('Error', 'Please enter a valid amount');
+      return;
+    }
+    if (totalAmount > walletBalance) {
+      Alert.alert('Error', 'Insufficient balance');
+      return;
+    }
+    if (!recipientName.trim()) {
+      Alert.alert('Error', 'Please enter recipient name');
+      return;
+    }
+    if (!recipientNumber.trim() && !recipientAccountNumber.trim()) {
+      Alert.alert('Error', 'Please enter recipient number or account');
+      return;
+    }
+    if (!selectedBank) {
+      Alert.alert('Error', 'Please select a bank or e-wallet');
+      return;
+    }
+
+    // Process transfer
+    setWalletBalance(prev => prev - totalAmount);
+
+    const bank = banks.find(b => b.id === selectedBank);
+
+    // Add to transaction history
+    const newTransaction = {
+      id: Date.now(),
+      type: 'Transfer Out',
+      amount: -amount,
+      recipient: recipientName,
+      recipientNumber: bank?.inputType === 'mobile' ? recipientNumber : recipientAccountNumber,
+      bank: bank?.name,
+      date: new Date().toISOString(),
+      status: 'Completed',
+      note: transferNote || 'Money transfer',
+      fee: transferFee,
+    };
+    setWalletTransactions(prev => [newTransaction, ...prev]);
+
+    // Add notification
+    const notification = {
+      id: Date.now(),
+      title: 'Transfer Successful',
+      message: `Php ${amount.toFixed(2)} sent to ${recipientName} via ${bank?.name}`,
+      time: 'Just now',
+      read: false,
+    };
+    setNotifications(prev => [notification, ...prev]);
+    setHasUnreadNotifications(true);
+
+    // Reset form and close modal
+    resetTransferForm();
+    setShowTransferModal(false);
+
+    Alert.alert(
+      'Success',
+      `Php ${amount.toFixed(2)} transferred successfully to ${recipientName} via ${bank?.name}!`
+    );
+  };
+
+  const resetTransferForm = () => {
+    setTransferAmount('');
+    setRecipientName('');
+    setRecipientNumber('');
+    setRecipientAccountNumber('');
+    setTransferNote('');
+    setSelectedBank('');
+    setTransferFee(0);
+    setTotalAmount(0);
+    setTransferStep(1);
+  };
+
+  const handleNextStep = () => {
+    if (transferStep === 1 && !selectedBank) {
+      Alert.alert('Error', 'Please select a bank or e-wallet');
+      return;
+    }
+
+    if (transferStep === 2) {
+      const amount = parseFloat(transferAmount);
+      if (!amount || amount <= 0) {
+        Alert.alert('Error', 'Please enter a valid amount');
+        return;
+      }
+      if (!recipientName.trim()) {
+        Alert.alert('Error', 'Please enter recipient name');
+        return;
+      }
+
+      const bank = banks.find(b => b.id === selectedBank);
+      if (bank?.inputType === 'mobile' && !recipientNumber.trim()) {
+        Alert.alert('Error', 'Please enter recipient mobile number');
+        return;
+      }
+      if (bank?.inputType === 'account' && !recipientAccountNumber.trim()) {
+        Alert.alert('Error', 'Please enter recipient account number');
+        return;
+      }
+    }
+
+    setTransferStep(prev => prev + 1);
+  };
+
+  const handlePreviousStep = () => {
+    setTransferStep(prev => prev - 1);
+  };
+
+  const handleCashIn = () => {
+    const amount = parseFloat(cashInAmount);
+    if (!amount || amount <= 0) {
+      Alert.alert('Error', 'Please enter a valid amount');
+      return;
+    }
+    if (!selectedCashInMethod) {
+      Alert.alert('Error', 'Please select a cash-in method');
+      return;
+    }
+
+    const method = cashInMethods.find(m => m.id === selectedCashInMethod);
+    const netAmount = amount - (method?.fee || 0);
+
+    setWalletBalance(prev => prev + netAmount);
+
+    const newTransaction = {
+      id: Date.now(),
+      type: 'Cash In',
+      amount: netAmount,
+      source: method?.name,
+      date: new Date().toISOString(),
+      status: 'Completed',
+      fee: method?.fee || 0,
+    };
+    setWalletTransactions(prev => [newTransaction, ...prev]);
+
+    const notification = {
+      id: Date.now(),
+      title: 'Cash In Successful',
+      message: `Php ${netAmount.toFixed(2)} added to your wallet via ${method?.name}`,
+      time: 'Just now',
+      read: false,
+    };
+    setNotifications(prev => [notification, ...prev]);
+    setHasUnreadNotifications(true);
+
+    setCashInAmount('');
+    setSelectedCashInMethod('');
+    setShowCashInModal(false);
+
+    Alert.alert('Success', `Php ${netAmount.toFixed(2)} added to your wallet!`);
+  };
+
+  const handleQRPayment = () => {
+    const amount = parseFloat(qrAmount);
+    if (!amount || amount <= 0) {
+      Alert.alert('Error', 'Please enter a valid amount');
+      return;
+    }
+    if (amount > walletBalance) {
+      Alert.alert('Error', 'Insufficient balance');
+      return;
+    }
+
+    setWalletBalance(prev => prev - amount);
+
+    const newTransaction = {
+      id: Date.now(),
+      type: 'QR Payment',
+      amount: -amount,
+      merchant: merchantName,
+      date: new Date().toISOString(),
+      status: 'Completed',
+    };
+    setWalletTransactions(prev => [newTransaction, ...prev]);
+
+    const notification = {
+      id: Date.now(),
+      title: 'QR Payment Successful',
+      message: `Php ${amount.toFixed(2)} paid to ${merchantName}`,
+      time: 'Just now',
+      read: false,
+    };
+    setNotifications(prev => [notification, ...prev]);
+    setHasUnreadNotifications(true);
+
+    setQrAmount('');
+    setShowPayQRModal(false);
+
+    Alert.alert('Success', `Payment of Php ${amount.toFixed(2)} successful!`);
+  };
+
+  // Check for loan status when screen focuses
+  useEffect(() => {
+    const status = route?.params?.loanStatus;
+    if (!status) return;
+
+    setLoanApplicationStatus(status);
+    setShowLoanStatusModal(true);
+
+    // If loan is approved, add the amount to wallet
+    if (status.status === 'approved') {
+      const amountValue = parseFloat(String(status.amount || '').replace(/[^0-9.]/g, ''));
+      if (!isNaN(amountValue)) {
+        setWalletBalance(prev => prev + amountValue);
+
+        const newTransaction = {
+          id: Date.now(),
+          type: 'Loan Disbursement',
+          amount: amountValue,
+          date: new Date().toISOString(),
+          status: 'Completed',
+        };
+        setWalletTransactions(prev => [newTransaction, ...prev]);
+      }
+    }
+
+    const newNotification = {
+      id: Date.now(),
+      title: status.status === 'approved' ? 'Loan Approved' : 'Loan Application Submitted',
+      message:
+        status.status === 'approved'
+          ? `Your loan of ${status.amount} has been approved and credited to your wallet`
+          : `Your application for ${status.amount} is being processed`,
+      time: 'Just now',
+      read: false,
+    };
+    setNotifications(prev => [newNotification, ...prev]);
+    setHasUnreadNotifications(true);
+
+    navigation.setParams({ loanStatus: undefined });
+  }, [route?.params?.loanStatus, navigation]);
+
+  // Update current date time every second
+  useEffect(() => {
+    const updateDateTime = () => {
+      const now = new Date();
+      const options = {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true,
+      };
+      setCurrentDateTime(now.toLocaleString('en-US', options).toUpperCase());
+    };
+
+    updateDateTime();
+    const interval = setInterval(updateDateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleLogout = () => {
+    navigation.navigate('Welcome');
+  };
+
+  const handleNotificationPress = id => {
+    const updated = notifications.map(n => (n.id === id ? { ...n, read: true } : n));
+    setNotifications(updated);
+    setHasUnreadNotifications(updated.some(n => !n.read));
+  };
+
+  const markAllAsRead = () => {
+    setNotifications(notifications.map(n => ({ ...n, read: true })));
+    setHasUnreadNotifications(false);
+  };
+
+  const formatTransactionDate = dateString => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  // Simple Profile Screen Component
+  const ProfileScreen = ({ onBack, onLogout }) => {
+    const [profileData] = useState({
+      name: 'Juan Dela Cruz',
+      email: 'juan.delacruz@example.com',
+      memberSince: 'January 15, 2023',
+      accountStatus: 'Active',
+      phoneNumber: '+63 912 345 6789',
+      address: '123 Main Street, Manila, Philippines',
+      profileImage: null,
+    });
+
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={onBack}>
+            <Text style={styles.backButton}>←</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Profile</Text>
+          <View style={{ width: 24 }} />
+        </View>
+
+        <ScrollView contentContainerStyle={styles.profileContent}>
+          <View style={styles.avatarContainer}>
+            {profileData.profileImage ? (
+              <Image source={{ uri: profileData.profileImage }} style={styles.avatar} />
+            ) : (
+              <View style={[styles.avatar, styles.emptyAvatar]}>
+                <MaterialIcons name="person" size={40} color="#9CA3AF" />
+              </View>
+            )}
+            <Text style={styles.name}>{profileData.name || 'No name provided'}</Text>
+            <Text style={styles.email}>{profileData.email || 'No email provided'}</Text>
+          </View>
+
+          <View style={styles.detailsContainer}>
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Member Since</Text>
+              <Text style={styles.detailValue}>{profileData.memberSince || 'Not available'}</Text>
+            </View>
+
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Account Status</Text>
+              <Text style={[styles.detailValue, styles.activeStatus]}>
+                {profileData.accountStatus || 'Unknown'}
+              </Text>
+            </View>
+
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Phone Number</Text>
+              <Text style={styles.detailValue}>{profileData.phoneNumber || 'Not provided'}</Text>
+            </View>
+
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Address</Text>
+              <Text style={styles.detailValue}>{profileData.address || 'Not provided'}</Text>
+            </View>
+          </View>
+
+          <TouchableOpacity style={styles.settingsButton} onPress={() => {}}>
+            <Text style={styles.settingsButtonText}>Account Settings</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
+            <Text style={styles.logoutButtonText}>Log Out</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  };
+
+  if (showProfile) {
+    return <ProfileScreen onBack={() => setShowProfile(false)} onLogout={handleLogout} />;
+  }
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <Image source={require('../assets/LoraLogo.png')} style={styles.logo} />
+          <Text style={styles.appName}>Lora</Text>
+        </View>
+        <TouchableOpacity style={styles.notificationButton} onPress={() => setShowNotifications(true)}>
+          <MaterialIcons name="notifications" size={24} color="#374151" />
+          {hasUnreadNotifications && <View style={styles.notificationDot} />}
+        </TouchableOpacity>
+      </View>
+
+      {/* Enhanced Transfer Modal */}
+      <Modal
+        visible={showTransferModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => {
+          resetTransferForm();
+          setShowTransferModal(false);
+        }}
+      >
+        <View style={styles.centeredView}>
+          <View style={styles.walletModal}>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => {
+                resetTransferForm();
+                setShowTransferModal(false);
+              }}
+            >
+              <MaterialIcons name="close" size={24} color="#6B7280" />
+            </TouchableOpacity>
+
+            <Text style={styles.walletModalTitle}>
+              {transferStep === 1 && 'Select Bank'}
+              {transferStep === 2 && 'Transfer Details'}
+              {transferStep === 3 && 'Confirm Transfer'}
+            </Text>
+
+            {/* Progress Steps */}
+            <View style={styles.progressSteps}>
+              <View style={[styles.step, transferStep >= 1 && styles.activeStep]}>
+                <Text style={[styles.stepText, transferStep >= 1 && styles.activeStepText]}>1</Text>
+                <Text style={[styles.stepLabel, transferStep >= 1 && styles.activeStepLabel]}>
+                  Bank
+                </Text>
+              </View>
+              <View style={[styles.stepLine, transferStep >= 2 && styles.activeStepLine]} />
+              <View style={[styles.step, transferStep >= 2 && styles.activeStep]}>
+                <Text style={[styles.stepText, transferStep >= 2 && styles.activeStepText]}>2</Text>
+                <Text style={[styles.stepLabel, transferStep >= 2 && styles.activeStepLabel]}>
+                  Details
+                </Text>
+              </View>
+              <View style={[styles.stepLine, transferStep >= 3 && styles.activeStepLine]} />
+              <View style={[styles.step, transferStep >= 3 && styles.activeStep]}>
+                <Text style={[styles.stepText, transferStep >= 3 && styles.activeStepText]}>3</Text>
+                <Text style={[styles.stepLabel, transferStep >= 3 && styles.activeStepLabel]}>
+                  Confirm
+                </Text>
+              </View>
+            </View>
+
+            {/* Step 1: Select Bank */}
+            {transferStep === 1 && (
+              <>
+                <Text style={styles.walletBalance}>Available: Php {walletBalance.toFixed(2)}</Text>
+
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>Select Bank or E-Wallet</Text>
+                  <ScrollView style={styles.bankList} showsVerticalScrollIndicator={false}>
+                    <View style={styles.bankGrid}>
+                      {banks.map(bank => (
+                        <TouchableOpacity
+                          key={bank.id}
+                          style={[
+                            styles.bankOptionCard,
+                            selectedBank === bank.id && styles.selectedBankOptionCard,
+                            { borderLeftColor: bank.color },
+                          ]}
+                          onPress={() => setSelectedBank(bank.id)}
+                        >
+                          <View style={styles.bankOptionHeader}>
+                            <View style={styles.bankOptionInfo}>
+                              <Text style={styles.bankIcon}>{bank.icon}</Text>
+                              <View style={styles.bankDetails}>
+                                <Text style={styles.bankName}>{bank.name}</Text>
+                                <Text style={styles.bankDescription}>{bank.description}</Text>
+                              </View>
+                            </View>
+                            {selectedBank === bank.id && (
+                              <MaterialIcons name="check-circle" size={24} color={bank.color} />
+                            )}
+                          </View>
+                          <View style={styles.bankOptionFooter}>
+                            <Text style={styles.bankFee}>
+                              Fee:{' '}
+                              <Text style={bank.fee === 0 ? styles.freeText : styles.feeText}>
+                                Php {bank.fee.toFixed(2)}
+                              </Text>
+                            </Text>
+                            <Text style={styles.bankProcessing}>• {bank.processing}</Text>
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </ScrollView>
+                </View>
+
+                <TouchableOpacity
+                  style={[
+                    styles.walletActionButtonPrimary,
+                    !selectedBank && styles.disabledButton,
+                  ]}
+                  onPress={handleNextStep}
+                  disabled={!selectedBank}
+                >
+                  <Text style={styles.walletActionButtonPrimaryText}>Continue</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
+            {/* Step 2: Fill Details */}
+            {transferStep === 2 && (
+              <>
+                <View style={styles.selectedBankPreview}>
+                  <Text style={styles.selectedBankText}>
+                    Sending via: {banks.find(b => b.id === selectedBank)?.name}
+                  </Text>
+                </View>
+
+                <ScrollView style={styles.transferForm} showsVerticalScrollIndicator={false}>
+                  <View style={styles.inputContainer}>
+                    <Text style={styles.inputLabel}>Recipient Full Name</Text>
+                    <TextInput
+                      style={styles.textInput}
+                      placeholder="Juan Dela Cruz"
+                      value={recipientName}
+                      onChangeText={setRecipientName}
+                    />
+                  </View>
+
+                  {selectedBank && (
+                    <View style={styles.inputContainer}>
+                      <Text style={styles.inputLabel}>
+                        {banks.find(b => b.id === selectedBank)?.inputType === 'mobile'
+                          ? 'Recipient Mobile Number'
+                          : 'Recipient Account Number'}
+                      </Text>
+                      <TextInput
+                        style={styles.textInput}
+                        placeholder={banks.find(b => b.id === selectedBank)?.placeholder}
+                        value={
+                          banks.find(b => b.id === selectedBank)?.inputType === 'mobile'
+                            ? recipientNumber
+                            : recipientAccountNumber
+                        }
+                        onChangeText={
+                          banks.find(b => b.id === selectedBank)?.inputType === 'mobile'
+                            ? setRecipientNumber
+                            : setRecipientAccountNumber
+                        }
+                        keyboardType={
+                          banks.find(b => b.id === selectedBank)?.inputType === 'mobile'
+                            ? 'phone-pad'
+                            : 'numeric'
+                        }
+                      />
+                    </View>
+                  )}
+
+                  <View style={styles.inputContainer}>
+                    <Text style={styles.inputLabel}>Amount</Text>
+                    <TextInput
+                      style={styles.textInput}
+                      placeholder="0.00"
+                      value={transferAmount}
+                      onChangeText={setTransferAmount}
+                      keyboardType="numeric"
+                    />
+                  </View>
+
+                  <View style={styles.inputContainer}>
+                    <Text style={styles.inputLabel}>Note (Optional)</Text>
+                    <TextInput
+                      style={styles.textInput}
+                      placeholder="Payment for..."
+                      value={transferNote}
+                      onChangeText={setTransferNote}
+                    />
+                  </View>
+
+                  {/* Amount Summary */}
+                  {transferAmount ? (
+                    <View style={styles.amountSummary}>
+                      <View style={styles.amountRow}>
+                        <Text style={styles.amountLabel}>Transfer Amount:</Text>
+                        <Text style={styles.amountValue}>
+                          Php {parseFloat(transferAmount || 0).toFixed(2)}
+                        </Text>
+                      </View>
+                      <View style={styles.amountRow}>
+                        <Text style={styles.amountLabel}>Processing Fee:</Text>
+                        <Text style={styles.amountValue}>Php {transferFee.toFixed(2)}</Text>
+                      </View>
+                      <View style={[styles.amountRow, styles.totalAmountRow]}>
+                        <Text style={styles.totalAmountLabel}>Total Amount:</Text>
+                        <Text style={styles.totalAmountValue}>Php {totalAmount.toFixed(2)}</Text>
+                      </View>
+                    </View>
+                  ) : null}
+                </ScrollView>
+
+                <View style={styles.formActions}>
+                  <TouchableOpacity style={styles.secondaryButton} onPress={handlePreviousStep}>
+                    <Text style={styles.secondaryButtonText}>Back</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.walletActionButtonPrimary,
+                      (!transferAmount || !recipientName) && styles.disabledButton,
+                    ]}
+                    onPress={handleNextStep}
+                    disabled={!transferAmount || !recipientName}
+                  >
+                    <Text style={styles.walletActionButtonPrimaryText}>Continue</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+
+            {/* Step 3: Confirm Transfer */}
+            {transferStep === 3 && (
+              <>
+                <ScrollView style={styles.confirmationView} showsVerticalScrollIndicator={false}>
+                  <View style={styles.confirmationCard}>
+                    <Text style={styles.confirmationTitle}>Transfer Summary</Text>
+
+                    <View style={styles.confirmationRow}>
+                      <Text style={styles.confirmationLabel}>Recipient Name:</Text>
+                      <Text style={styles.confirmationValue}>{recipientName}</Text>
+                    </View>
+
+                    <View style={styles.confirmationRow}>
+                      <Text style={styles.confirmationLabel}>
+                        {banks.find(b => b.id === selectedBank)?.inputType === 'mobile'
+                          ? 'Mobile Number:'
+                          : 'Account Number:'}
+                      </Text>
+                      <Text style={styles.confirmationValue}>
+                        {banks.find(b => b.id === selectedBank)?.inputType === 'mobile'
+                          ? recipientNumber
+                          : recipientAccountNumber}
+                      </Text>
+                    </View>
+
+                    <View style={styles.confirmationRow}>
+                      <Text style={styles.confirmationLabel}>Bank/E-Wallet:</Text>
+                      <Text style={styles.confirmationValue}>
+                        {banks.find(b => b.id === selectedBank)?.name}
+                      </Text>
+                    </View>
+
+                    <View style={styles.confirmationRow}>
+                      <Text style={styles.confirmationLabel}>Amount:</Text>
+                      <Text style={styles.confirmationValue}>
+                        Php {parseFloat(transferAmount || 0).toFixed(2)}
+                      </Text>
+                    </View>
+
+                    <View style={styles.confirmationRow}>
+                      <Text style={styles.confirmationLabel}>Processing Fee:</Text>
+                      <Text style={styles.confirmationValue}>Php {transferFee.toFixed(2)}</Text>
+                    </View>
+
+                    <View style={[styles.confirmationRow, styles.confirmationTotal]}>
+                      <Text style={styles.confirmationTotalLabel}>Total Deducted:</Text>
+                      <Text style={styles.confirmationTotalValue}>Php {totalAmount.toFixed(2)}</Text>
+                    </View>
+
+                    {transferNote ? (
+                      <View style={styles.confirmationRow}>
+                        <Text style={styles.confirmationLabel}>Note:</Text>
+                        <Text style={styles.confirmationValue}>{transferNote}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+
+                  <View style={styles.warningBox}>
+                    <MaterialIcons name="warning" size={20} color="#F59E0B" />
+                    <Text style={styles.warningText}>
+                      Please review all details carefully. Transactions cannot be reversed once
+                      processed.
+                    </Text>
+                  </View>
+                </ScrollView>
+
+                <View style={styles.formActions}>
+                  <TouchableOpacity style={styles.secondaryButton} onPress={handlePreviousStep}>
+                    <Text style={styles.secondaryButtonText}>Back</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.walletActionButtonPrimary} onPress={handleTransfer}>
+                    <Text style={styles.walletActionButtonPrimaryText}>Confirm Transfer</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Cash In Modal */}
+      <Modal
+        visible={showCashInModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowCashInModal(false)}
+      >
+        <View style={styles.centeredView}>
+          <View style={styles.walletModal}>
+            <TouchableOpacity style={styles.closeButton} onPress={() => setShowCashInModal(false)}>
+              <MaterialIcons name="close" size={24} color="#6B7280" />
+            </TouchableOpacity>
+
+            <Text style={styles.walletModalTitle}>Cash In</Text>
+            <Text style={styles.walletBalance}>Available: Php {walletBalance.toFixed(2)}</Text>
+
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>Amount to Cash In</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="0.00"
+                value={cashInAmount}
+                onChangeText={setCashInAmount}
+                keyboardType="numeric"
+              />
+            </View>
+
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>Select E-Wallet</Text>
+              <View style={styles.cashInMethodsContainer}>
+                {cashInMethods.map(method => (
+                  <TouchableOpacity
+                    key={method.id}
+                    style={[
+                      styles.cashInMethodCard,
+                      selectedCashInMethod === method.id && styles.selectedCashInMethodCard,
+                      { borderLeftColor: method.color },
+                    ]}
+                    onPress={() => setSelectedCashInMethod(method.id)}
+                  >
+                    <View style={styles.cashInMethodHeader}>
+                      <View style={styles.cashInMethodInfo}>
+                        <Text style={styles.cashInMethodIcon}>{method.icon}</Text>
+                        <View style={styles.cashInMethodDetails}>
+                          <Text style={styles.cashInMethodName}>{method.name}</Text>
+                          <Text style={styles.cashInMethodDescription}>{method.description}</Text>
+                        </View>
+                      </View>
+                      {selectedCashInMethod === method.id && (
+                        <MaterialIcons name="check-circle" size={24} color={method.color} />
+                      )}
+                    </View>
+                    <View style={styles.cashInMethodFooter}>
+                      <Text style={styles.cashInMethodFee}>
+                        Processing Fee: <Text style={styles.freeText}>FREE</Text>
+                      </Text>
+                      <Text style={styles.cashInMethodTime}>• Instant Transfer</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.walletActionButtonPrimary, !selectedCashInMethod && styles.disabledButton]}
+              onPress={handleCashIn}
+              disabled={!selectedCashInMethod}
+            >
+              <Text style={styles.walletActionButtonPrimaryText}>
+                Cash In via{' '}
+                {selectedCashInMethod
+                  ? cashInMethods.find(m => m.id === selectedCashInMethod)?.name
+                  : 'E-Wallet'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Pay QR Modal */}
+      <Modal
+        visible={showPayQRModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowPayQRModal(false)}
+      >
+        <View style={styles.centeredView}>
+          <View style={styles.walletModal}>
+            <TouchableOpacity style={styles.closeButton} onPress={() => setShowPayQRModal(false)}>
+              <MaterialIcons name="close" size={24} color="#6B7280" />
+            </TouchableOpacity>
+
+            <Text style={styles.walletModalTitle}>QR Payment</Text>
+            <Text style={styles.walletBalance}>Available: Php {walletBalance.toFixed(2)}</Text>
+
+            <View style={styles.qrCodeContainer}>
+              <View style={styles.qrCode}>
+                <MaterialIcons name="qr-code-2" size={100} color="#8B5CF6" />
+              </View>
+              <Text style={styles.merchantName}>{merchantName}</Text>
+            </View>
+
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>Amount to Pay</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="0.00"
+                value={qrAmount}
+                onChangeText={setQrAmount}
+                keyboardType="numeric"
+              />
+            </View>
+
+            <TouchableOpacity style={styles.walletActionButtonPrimary} onPress={handleQRPayment}>
+              <Text style={styles.walletActionButtonPrimaryText}>Pay Now</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Transaction History Modal */}
+      <Modal
+        visible={showTransactionHistory}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setShowTransactionHistory(false)}
+      >
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Transaction History</Text>
+            <TouchableOpacity onPress={() => setShowTransactionHistory(false)}>
+              <MaterialIcons name="close" size={24} color="#374151" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.transactionHistoryList}>
+            {walletTransactions.map(transaction => (
+              <View key={transaction.id} style={styles.transactionHistoryItem}>
+                <View style={styles.transactionHistoryIcon}>
+                  <MaterialIcons
+                    name={
+                      transaction.type === 'Transfer Out'
+                        ? 'send'
+                        : transaction.type === 'Cash In'
+                        ? 'add-circle'
+                        : transaction.type === 'QR Payment'
+                        ? 'qr-code'
+                        : 'account-balance'
+                    }
+                    size={24}
+                    color={transaction.amount > 0 ? '#10B981' : '#EF4444'}
+                  />
+                </View>
+
+                <View style={styles.transactionHistoryDetails}>
+                  <Text style={styles.transactionHistoryType}>{transaction.type}</Text>
+                  <Text style={styles.transactionHistoryDate}>
+                    {formatTransactionDate(transaction.date)}
+                  </Text>
+                  {transaction.recipient ? (
+                    <Text style={styles.transactionHistoryExtra}>To: {transaction.recipient}</Text>
+                  ) : null}
+                  {transaction.bank ? (
+                    <Text style={styles.transactionHistoryExtra}>Via: {transaction.bank}</Text>
+                  ) : null}
+                  {transaction.source ? (
+                    <Text style={styles.transactionHistoryExtra}>From: {transaction.source}</Text>
+                  ) : null}
+                  {transaction.merchant ? (
+                    <Text style={styles.transactionHistoryExtra}>At: {transaction.merchant}</Text>
+                  ) : null}
+                  {transaction.note ? (
+                    <Text style={styles.transactionHistoryExtra}>{transaction.note}</Text>
+                  ) : null}
+                  {transaction.fee > 0 ? (
+                    <Text style={styles.transactionHistoryExtra}>
+                      Fee: Php {transaction.fee.toFixed(2)}
+                    </Text>
+                  ) : null}
+                </View>
+
+                <View style={styles.transactionHistoryAmountContainer}>
+                  <Text
+                    style={[
+                      styles.transactionHistoryAmount,
+                      { color: transaction.amount > 0 ? '#10B981' : '#EF4444' },
+                    ]}
+                  >
+                    {transaction.amount > 0 ? '+' : ''}Php {Math.abs(transaction.amount).toFixed(2)}
+                  </Text>
+                  <Text style={styles.transactionHistoryStatus}>{transaction.status}</Text>
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Notifications Modal */}
+      <Modal
+        visible={showNotifications}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setShowNotifications(false)}
+      >
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Notifications</Text>
+            <View style={styles.modalHeaderActions}>
+              <TouchableOpacity onPress={markAllAsRead}>
+                <Text style={styles.markAllText}>Mark all as read</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowNotifications(false)}>
+                <MaterialIcons name="close" size={24} color="#374151" />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <ScrollView style={styles.notificationsList}>
+            {notifications.length > 0 ? (
+              notifications.map(notification => (
+                <TouchableOpacity
+                  key={notification.id}
+                  style={[styles.notificationItem, !notification.read && styles.unreadNotification]}
+                  onPress={() => handleNotificationPress(notification.id)}
+                >
+                  <View style={styles.notificationContent}>
+                    <Text style={styles.notificationTitle}>{notification.title}</Text>
+                    <Text style={styles.notificationMessage}>{notification.message}</Text>
+                    <Text style={styles.notificationTime}>{notification.time}</Text>
+                  </View>
+                  {!notification.read ? <View style={styles.unreadDot} /> : null}
+                </TouchableOpacity>
+              ))
+            ) : (
+              <View style={styles.emptyNotifications}>
+                <MaterialIcons name="notifications-off" size={40} color="#9CA3AF" />
+                <Text style={styles.emptyText}>No notifications yet</Text>
+              </View>
+            )}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Enhanced Credit Score Modal */}
+      <Modal
+        visible={showCreditScoreModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowCreditScoreModal(false)}
+      >
+        <View style={styles.centeredView}>
+          <View style={styles.creditScoreModal}>
+            <TouchableOpacity style={styles.closeButton} onPress={() => setShowCreditScoreModal(false)}>
+              <MaterialIcons name="close" size={24} color="#6B7280" />
+            </TouchableOpacity>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text style={styles.creditScoreModalTitle}>Your Credit Profile</Text>
+
+              <View style={styles.enhancedMeterContainer}>
+                <View style={styles.scoreCircleContainer}>
+                  <View style={styles.scoreCircleOuter}>
+                    <View
+                      style={[
+                        styles.scoreCircleProgress,
+                        {
+                          transform: [{ rotate: `${scoreNeedleRotation}deg` }],
+                          borderTopColor: creditStatusColor,
+                          borderRightColor: creditStatusColor,
+                        },
+                      ]}
+                    />
+                    <View style={styles.scoreCircleInner}>
+                      <Text style={styles.scoreCircleNumber}>{creditScore}</Text>
+                      <Text style={[styles.scoreCircleStatus, { color: creditStatusColor }]}>
+                        {creditStatus.toUpperCase()}
+                      </Text>
+                      <Text style={styles.scoreCircleLabel}>Credit Score</Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.scoreRanges}>
+                  <View style={styles.scoreRangeItem}>
+                    <View style={[styles.rangeDot, { backgroundColor: '#EF4444' }]} />
+                    <Text style={styles.rangeText}>300-579</Text>
+                    <Text style={styles.rangeLabel}>Poor</Text>
+                  </View>
+                  <View style={styles.scoreRangeItem}>
+                    <View style={[styles.rangeDot, { backgroundColor: '#F59E0B' }]} />
+                    <Text style={styles.rangeText}>580-669</Text>
+                    <Text style={styles.rangeLabel}>Fair</Text>
+                  </View>
+                  <View style={styles.scoreRangeItem}>
+                    <View style={[styles.rangeDot, { backgroundColor: '#10B981' }]} />
+                    <Text style={styles.rangeText}>670-850</Text>
+                    <Text style={styles.rangeLabel}>Excellent</Text>
+                  </View>
+                </View>
+
+                <View style={styles.quickStats}>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statValue}>₱500K</Text>
+                    <Text style={styles.statLabel}>Max Loan</Text>
+                  </View>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statValue}>8.5%</Text>
+                    <Text style={styles.statLabel}>Best Rate</Text>
+                  </View>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statValue}>36</Text>
+                    <Text style={styles.statLabel}>Months Max</Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.creditBreakdownSection}>
+                <Text style={styles.modalSectionTitle}>Credit Score Factors</Text>
+
+                {[
+                  {
+                    title: 'Payment History',
+                    percentage: '35%',
+                    progress: 85,
+                    status: 'Excellent - No missed payments',
+                    color: '#10B981',
+                  },
+                  {
+                    title: 'Credit Utilization',
+                    percentage: '30%',
+                    progress: 70,
+                    status: 'Good - 25% utilization',
+                    color: '#F59E0B',
+                  },
+                  {
+                    title: 'Credit History Length',
+                    percentage: '15%',
+                    progress: 60,
+                    status: 'Fair - 3 years average',
+                    color: '#8B5CF6',
+                  },
+                  {
+                    title: 'Credit Mix',
+                    percentage: '10%',
+                    progress: 75,
+                    status: 'Good - Diverse credit types',
+                    color: '#10B981',
+                  },
+                  {
+                    title: 'New Credit',
+                    percentage: '10%',
+                    progress: 80,
+                    status: 'Excellent - No recent inquiries',
+                    color: '#10B981',
+                  },
+                ].map((factor, index) => (
+                  <View key={index} style={styles.creditFactor}>
+                    <View style={styles.creditFactorHeader}>
+                      <Text style={styles.creditFactorTitle}>{factor.title}</Text>
+                      <Text style={styles.creditFactorPercentage}>{factor.percentage}</Text>
+                    </View>
+                    <View style={styles.progressBarContainer}>
+                      <View style={[styles.progressFill, { width: `${factor.progress}%`, backgroundColor: factor.color }]} />
+                    </View>
+                    <Text style={styles.creditFactorStatus}>{factor.status}</Text>
+                  </View>
+                ))}
+              </View>
+
+              <View style={styles.benefitsSection}>
+                <Text style={styles.sectionTitle}>Your Benefits</Text>
+                <View style={styles.benefitsGrid}>
+                  <View style={styles.benefitCard}>
+                    <MaterialIcons name="check-circle" size={20} color="#10B981" />
+                    <Text style={styles.benefitText}>Pre-approved for loans</Text>
+                  </View>
+                  <View style={styles.benefitCard}>
+                    <MaterialIcons name="check-circle" size={20} color="#10B981" />
+                    <Text style={styles.benefitText}>Low interest rates</Text>
+                  </View>
+                  <View style={styles.benefitCard}>
+                    <MaterialIcons name="check-circle" size={20} color="#10B981" />
+                    <Text style={styles.benefitText}>Flexible terms</Text>
+                  </View>
+                  <View style={styles.benefitCard}>
+                    <MaterialIcons name="check-circle" size={20} color="#10B981" />
+                    <Text style={styles.benefitText}>Priority support</Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.actionButtonsContainer}>
+                <TouchableOpacity
+                  style={styles.secondaryButton}
+                  onPress={() => {
+                    setShowCreditScoreModal(false);
+                    navigation.navigate('CreditReport');
+                  }}
+                >
+                  <Text style={styles.secondaryButtonText}>View Full Report</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.applyLoanButton}
+                  onPress={() => {
+                    setShowCreditScoreModal(false);
+                    navigation.navigate('LoanApplication');
+                  }}
+                >
+                  <Text style={styles.applyLoanButtonText}>Apply for Loan</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Loan Application Status Modal */}
+      <Modal
+        visible={showLoanStatusModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowLoanStatusModal(false)}
+      >
+        <View style={styles.centeredView}>
+          <View style={styles.loanStatusModal}>
+            <View style={styles.loanStatusHeader}>
+              <MaterialIcons name="check-circle" size={40} color="#10B981" />
+              <Text style={styles.loanStatusTitle}>Application Submitted</Text>
+            </View>
+
+            <Text style={styles.loanStatusText}>
+              Your loan application is now being processed. We'll notify you once we have updates.
+            </Text>
+
+            <Text style={styles.loanStatusSubtext}>Application ID: {loanApplicationStatus?.id}</Text>
+
+            <View style={styles.loanStatusDetails}>
+              <View style={styles.loanStatusDetailItem}>
+                <Text style={styles.loanStatusDetailLabel}>Amount:</Text>
+                <Text style={styles.loanStatusDetailValue}>{loanApplicationStatus?.amount}</Text>
+              </View>
+              <View style={styles.loanStatusDetailItem}>
+                <Text style={styles.loanStatusDetailLabel}>Term:</Text>
+                <Text style={styles.loanStatusDetailValue}>{loanApplicationStatus?.term} months</Text>
+              </View>
+              <View style={styles.loanStatusDetailItem}>
+                <Text style={styles.loanStatusDetailLabel}>Lenders:</Text>
+                <Text style={styles.loanStatusDetailValue}>{loanApplicationStatus?.lenders}</Text>
+              </View>
+            </View>
+
+            <TouchableOpacity style={styles.loanStatusButton} onPress={() => setShowLoanStatusModal(false)}>
+              <Text style={styles.loanStatusButtonText}>Got it!</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Wallet Actions Modal */}
+      <Modal
+        visible={showWalletActions}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowWalletActions(false)}
+      >
+        <View style={styles.centeredView}>
+          <View style={styles.walletActionsModal}>
+            <TouchableOpacity style={styles.closeButton} onPress={() => setShowWalletActions(false)}>
+              <MaterialIcons name="close" size={24} color="#6B7280" />
+            </TouchableOpacity>
+
+            <Text style={styles.walletActionsTitle}>Wallet Actions</Text>
+
+            <View style={styles.walletActionButtons}>
+              <TouchableOpacity
+                style={styles.walletActionButton}
+                onPress={() => {
+                  setShowWalletActions(false);
+                  setShowTransferModal(true);
+                }}
+              >
+                <MaterialIcons name="send" size={30} color="#8B5CF6" />
+                <Text style={styles.walletActionButtonText}>Transfer</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.walletActionButton}
+                onPress={() => {
+                  setShowWalletActions(false);
+                  setShowPayQRModal(true);
+                }}
+              >
+                <MaterialIcons name="qr-code" size={30} color="#8B5CF6" />
+                <Text style={styles.walletActionButtonText}>Pay QR</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.walletActionButton}
+                onPress={() => {
+                  setShowWalletActions(false);
+                  setShowCashInModal(true);
+                }}
+              >
+                <MaterialIcons name="add-circle" size={30} color="#8B5CF6" />
+                <Text style={styles.walletActionButtonText}>Cash In</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* How to Loan Modal */}
+      <Modal
+        visible={showHowToLoanModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowHowToLoanModal(false)}
+      >
+        <View style={styles.centeredView}>
+          <View style={styles.howToLoanModal}>
+            <TouchableOpacity style={styles.closeButton} onPress={() => setShowHowToLoanModal(false)}>
+              <MaterialIcons name="close" size={24} color="#6B7280" />
+            </TouchableOpacity>
+
+            <Text style={styles.howToLoanModalTitle}>How to Loan with Lora</Text>
+
+            <ScrollView style={styles.howToLoanContent}>
+              <View style={styles.featureSection}>
+                <Text style={styles.featureTitle}>1. Check Your Credit Score</Text>
+                <Text style={styles.featureDescription}>
+                  View your current credit score to understand your eligibility for loans. A higher
+                  score gives you access to better rates and higher loan amounts.
+                </Text>
+              </View>
+
+              <View style={styles.featureSection}>
+                <Text style={styles.featureTitle}>2. Apply for a Loan</Text>
+                <Text style={styles.featureDescription}>
+                  Fill out our simple application form with your personal and financial details. Our
+                  process is quick and secure.
+                </Text>
+              </View>
+
+              <View style={styles.featureSection}>
+                <Text style={styles.featureTitle}>3. Get Approved</Text>
+                <Text style={styles.featureDescription}>
+                  Receive instant approval decisions. If approved, funds will be disbursed directly
+                  to your Lora wallet.
+                </Text>
+              </View>
+
+              <View style={styles.featureSection}>
+                <Text style={styles.featureTitle}>4. Manage Your Loan</Text>
+                <Text style={styles.featureDescription}>
+                  View your current loan balance, payment schedule, and make payments directly from
+                  your wallet.
+                </Text>
+              </View>
+
+              <View style={styles.featureSection}>
+                <Text style={styles.featureTitle}>5. Make Payments</Text>
+                <Text style={styles.featureDescription}>
+                  Use your wallet balance to make payments on time. Set up reminders to avoid
+                  missing due dates.
+                </Text>
+              </View>
+
+              <View style={styles.featureSection}>
+                <Text style={styles.featureTitle}>6. Wallet Features</Text>
+                <Text style={styles.featureDescription}>
+                  Your Lora wallet allows you to transfer funds, pay via QR code, and cash in from
+                  various payment channels.
+                </Text>
+              </View>
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.applyLoanButton}
+              onPress={() => {
+                setShowHowToLoanModal(false);
+                navigation.navigate('LoanApplication');
+              }}
+            >
+              <Text style={styles.applyLoanButtonText}>Apply for Loan Now</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Main Content */}
+      <ScrollView contentContainerStyle={styles.content}>
+        {/* Tab Selector */}
+        <View style={styles.tabSelector}>
+          <TouchableOpacity
+            style={[styles.tabButton, activeTab === 'pending' && styles.activeTab]}
+            onPress={() => setActiveTab('pending')}
+          >
+            <Text style={[styles.tabButtonText, activeTab === 'pending' && styles.activeTabText]}>
+              Pending Amount
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.tabButton, activeTab === 'wallet' && styles.activeTab]}
+            onPress={() => setActiveTab('wallet')}
+          >
+            <Text style={[styles.tabButtonText, activeTab === 'wallet' && styles.activeTabText]}>
+              My Wallet
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {activeTab === 'pending' ? (
+          <View style={styles.grandTotalCard}>
+            <View style={styles.grandTotalContent}>
+              <View style={styles.grandTotalInfo}>
+                <Text style={styles.grandTotalLabel}>Grand Total Pending Amount</Text>
+                <Text style={styles.grandTotalAmount}>Php 582,001.50</Text>
+                <Text style={styles.grandTotalDate}>AS OF {currentDateTime}</Text>
+              </View>
+              <TouchableOpacity style={styles.payNowButtonGrand} onPress={() => navigation.navigate('PayNow')}>
+                <Text style={styles.payNowButtonTextGrand}>PAY NOW</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.walletCard}>
+            <View style={styles.walletHeader}>
+              <Text style={styles.walletTitle}>My Wallet Balance</Text>
+              <TouchableOpacity onPress={() => setShowTransactionHistory(true)}>
+                <MaterialIcons name="history" size={20} color="rgba(255, 255, 255, 0.8)" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.walletAmount}>Php {walletBalance.toFixed(2)}</Text>
+            <Text style={styles.grandTotalDate}>AS OF {currentDateTime}</Text>
+
+            <View style={styles.walletActions}>
+              <TouchableOpacity style={styles.walletAction} onPress={() => setShowTransferModal(true)}>
+                <MaterialIcons name="send" size={20} color="white" />
+                <Text style={styles.walletActionText}>Transfer</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.walletAction} onPress={() => setShowPayQRModal(true)}>
+                <MaterialIcons name="qr-code" size={20} color="white" />
+                <Text style={styles.walletActionText}>Pay QR</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.walletAction} onPress={() => setShowCashInModal(true)}>
+                <MaterialIcons name="add-circle" size={20} color="white" />
+                <Text style={styles.walletActionText}>Cash In</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.walletAction} onPress={() => setShowWalletActions(true)}>
+                <MaterialIcons name="more-horiz" size={20} color="white" />
+                <Text style={styles.walletActionText}>More</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* Cards Row */}
+        <View style={styles.row}>
+          <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('CurrentLoan')}>
+            <Text style={styles.cardTitle}>Current Loan</Text>
+            <Text style={styles.cardValue}>Php 150,000.00</Text>
+          </TouchableOpacity>
+
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Next Payment Due</Text>
+            <Text style={styles.dueDate}>Aug 5, 2025</Text>
+            <Text style={styles.dueAmount}>Php 5,250.00</Text>
+          </View>
+        </View>
+
+        {/* Credit Score Card */}
+        <TouchableOpacity style={[styles.card, styles.fullWidthCard]} onPress={() => setShowCreditScoreModal(true)}>
+          <Text style={styles.cardTitle}>Credit Score</Text>
+          <View style={styles.creditScoreContainer}>
+            <Text style={styles.creditScore}>{creditScore}</Text>
+            <Text style={[styles.creditScoreLabel, { color: creditStatusColor }]}>
+              {creditStatus.toUpperCase()}
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* Loan Application */}
+        <View style={styles.loanApplicationCard}>
+          <Text style={styles.loanTitle}>Need Loan?</Text>
+          <Text style={styles.loanText}>Get approved in minutes with our quick application process</Text>
+          <View style={styles.loanButtonsContainer}>
+            <TouchableOpacity style={styles.applyButton} onPress={() => navigation.navigate('LoanApplication')}>
+              <Text style={styles.applyButtonText}>+ Apply for a loan</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.howToLoanButton} onPress={() => setShowHowToLoanModal(true)}>
+              <Text style={styles.howToLoanButtonText}>How to Loan</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Recent Transactions */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Recent Transactions</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Transactions')}>
+            <Text style={styles.seeAllText}>See All</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.transactionList}>
+          <TransactionItem type="Payment" amount="5,250.00" date="Jul 5, 2023" status="Completed" />
+          <TransactionItem type="Loan Disbursement" amount="150,000.00" date="Jun 15, 2023" status="Completed" />
+        </View>
+      </ScrollView>
+
+      {/* Bottom Navigation */}
+      <View style={styles.bottomNav}>
+        <TouchableOpacity style={styles.navItem}>
+          <View style={styles.navIcon}>
+            <Text style={styles.navIconText}>🏠</Text>
+          </View>
+          <Text style={styles.navTextActive}>Home</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Loans')}>
+          <View style={styles.navIcon}>
+            <Text style={styles.navIconText}>💵</Text>
+          </View>
+          <Text style={styles.navText}>Loans</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Transactions')}>
+          <View style={styles.navIcon}>
+            <Text style={styles.navIconText}>📊</Text>
+          </View>
+          <Text style={styles.navText}>Transactions</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Profile')}>
+          <View style={styles.navIcon}>
+            <Text style={styles.navIconText}>👤</Text>
+          </View>
+          <Text style={styles.navText}>Profile</Text>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
+  );
+};
+
+const TransactionItem = ({ type, amount, date, status }) => {
+  return (
+    <View style={styles.transactionItem}>
+      <View style={styles.transactionIcon}>
+        <Text style={styles.transactionIconText}>{type === 'Payment' ? '💸' : '🏦'}</Text>
+      </View>
+      <View style={styles.transactionDetails}>
+        <Text style={styles.transactionType}>{type}</Text>
+        <Text style={styles.transactionDate}>{date}</Text>
+      </View>
+      <View style={styles.transactionAmountContainer}>
+        <Text style={styles.transactionAmount}>Php {amount}</Text>
+        <Text style={[styles.transactionStatus, status === 'Completed' ? styles.statusCompleted : styles.statusPending]}>
+          {status}
+        </Text>
+      </View>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  // Enhanced Credit Score Meter Styles
+  enhancedMeterContainer: {
+    alignItems: 'center',
+    marginBottom: 30,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  scoreCircleContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  scoreCircleOuter: {
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: '#F8FAFC',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+    borderWidth: 8,
+    borderColor: '#F1F5F9',
+  },
+  scoreCircleProgress: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    borderWidth: 8,
+    borderLeftColor: '#F1F5F9',
+    borderBottomColor: '#F1F5F9',
+    transform: [{ rotate: '-135deg' }],
+  },
+  scoreCircleInner: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: 'white',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  scoreCircleNumber: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#1F2937',
+  },
+  scoreCircleStatus: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  scoreCircleLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  scoreRanges: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 20,
+  },
+  scoreRangeItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  rangeDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginBottom: 4,
+  },
+  rangeText: {
+    fontSize: 10,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  rangeLabel: {
+    fontSize: 10,
+    color: '#9CA3AF',
+  },
+  quickStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 16,
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  progressBarContainer: {
+    height: 6,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 3,
+    marginBottom: 5,
+    overflow: 'hidden',
+  },
+  benefitsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  benefitCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+    width: '48%',
+    borderWidth: 1,
+    borderColor: '#DCFCE7',
+  },
+
+  // Enhanced Transfer Modal Styles
+  progressSteps: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    paddingHorizontal: 20,
+  },
+  step: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#E5E7EB',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  activeStep: {
+    backgroundColor: '#8B5CF6',
+  },
+  stepText: {
+    color: '#6B7280',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  activeStepText: {
+    color: 'white',
+  },
+  stepLabel: {
+    fontSize: 10,
+    color: '#9CA3AF',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  activeStepLabel: {
+    color: '#8B5CF6',
+    fontWeight: '500',
+  },
+  stepLine: {
+    flex: 1,
+    height: 2,
+    backgroundColor: '#E5E7EB',
+    marginHorizontal: 8,
+  },
+  activeStepLine: {
+    backgroundColor: '#8B5CF6',
+  },
+  bankGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  bankOptionCard: {
+    width: '48%',
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    borderLeftWidth: 4,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  selectedBankOptionCard: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#8B5CF6',
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  bankOptionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  bankOptionInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  bankIcon: {
+    fontSize: 24,
+    marginRight: 8,
+  },
+  bankDetails: {
+    flex: 1,
+  },
+  bankName: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  bankDescription: {
+    fontSize: 10,
+    color: '#6B7280',
+  },
+  bankOptionFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  bankFee: {
+    fontSize: 10,
+    color: '#6B7280',
+  },
+  freeText: {
+    color: '#10B981',
+    fontWeight: 'bold',
+  },
+  feeText: {
+    color: '#EF4444',
+    fontWeight: '500',
+  },
+  bankProcessing: {
+    fontSize: 10,
+    color: '#6B7280',
+  },
+  selectedBankPreview: {
+    backgroundColor: '#F3F0FF',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  selectedBankText: {
+    color: '#8B5CF6',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  transferForm: {
+    maxHeight: 400,
+  },
+  formActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginTop: 16,
+  },
+  amountSummary: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    padding: 16,
+    marginTop: 16,
+  },
+  amountRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  totalAmountRow: {
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    paddingTop: 8,
+    marginTop: 8,
+  },
+  amountLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  amountValue: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1F2937',
+  },
+  totalAmountLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1F2937',
+  },
+  totalAmountValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#8B5CF6',
+  },
+  confirmationView: {
+    maxHeight: 400,
+  },
+  confirmationCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    marginBottom: 16,
+  },
+  confirmationTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  confirmationRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  confirmationTotal: {
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    paddingTop: 12,
+    marginTop: 8,
+  },
+  confirmationLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  confirmationValue: {
+    fontSize: 14,
+    color: '#1F2937',
+    fontWeight: '500',
+    textAlign: 'right',
+    flex: 1,
+    marginLeft: 8,
+  },
+  confirmationTotalLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1F2937',
+  },
+  confirmationTotalValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#8B5CF6',
+  },
+  warningBox: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFBEB',
+    borderColor: '#F59E0B',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'flex-start',
+  },
+  warningText: {
+    color: '#92400E',
+    fontSize: 12,
+    marginLeft: 8,
+    flex: 1,
+    lineHeight: 16,
+  },
+
+  // Updated Cash In Styles (kept only the card version to avoid style overrides)
+  cashInMethodsContainer: {
+    marginTop: 10,
+  },
+  cashInMethodCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderLeftWidth: 4,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  selectedCashInMethodCard: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#8B5CF6',
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  cashInMethodHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  cashInMethodInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  cashInMethodIcon: {
+    fontSize: 32,
+    marginRight: 12,
+  },
+  cashInMethodDetails: {
+    flex: 1,
+  },
+  cashInMethodName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  cashInMethodDescription: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  cashInMethodFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    paddingTop: 12,
+  },
+  cashInMethodFee: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  cashInMethodTime: {
+    fontSize: 14,
+    color: '#10B981',
+    fontWeight: '500',
+  },
+
+  disabledButton: {
+    backgroundColor: '#9CA3AF',
+    opacity: 0.6,
+  },
+
+  // Existing styles
+  grandTotalCard: {
+    backgroundColor: '#8B5CF6',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  grandTotalContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  grandTotalInfo: {
+    flex: 1,
+  },
+  grandTotalLabel: {
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: 14,
+  },
+  grandTotalAmount: {
+    color: 'white',
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginVertical: 8,
+  },
+  grandTotalDate: {
+    color: 'rgba(255, 255, 255, 0.75)',
+    fontSize: 12,
+  },
+  payNowButtonGrand: {
+    backgroundColor: 'white',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginLeft: 16,
+  },
+  payNowButtonTextGrand: {
+    color: '#8B5CF6',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  container: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: 'white',
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  appName: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#F97316',
+    marginLeft: 10,
+  },
+  logo: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  notificationButton: {
+    padding: 8,
+    position: 'relative',
+  },
+  notificationDot: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    width: 8,
+    height: 8,
+    backgroundColor: '#EF4444',
+    borderRadius: 4,
+  },
+  content: {
+    padding: 16,
+    paddingBottom: 80,
+  },
+  tabSelector: {
+    flexDirection: 'row',
+    backgroundColor: '#EDE9FE',
+    borderRadius: 8,
+    padding: 4,
+    marginBottom: 16,
+  },
+  tabButton: {
+    flex: 1,
+    padding: 10,
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  activeTab: {
+    backgroundColor: 'white',
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  tabButtonText: {
+    color: '#8B5CF6',
+    fontWeight: '500',
+  },
+  activeTabText: {
+    fontWeight: '600',
+  },
+  walletCard: {
+    backgroundColor: '#4F46E5',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  walletHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  walletTitle: {
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: 14,
+  },
+  walletAmount: {
+    color: 'white',
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginVertical: 8,
+  },
+  walletActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  walletAction: {
+    alignItems: 'center',
+    padding: 8,
+    flex: 1,
+  },
+  walletActionText: {
+    color: 'white',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  card: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    width: (width - 40) / 2,
+    elevation: 1,
+  },
+  fullWidthCard: {
+    width: '100%',
+    marginBottom: 16,
+  },
+  cardTitle: {
+    color: '#4B5563',
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  cardValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  dueDate: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  dueAmount: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#EF4444',
+  },
+  creditScoreContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  creditScore: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1F2937',
+  },
+  creditScoreLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  loanApplicationCard: {
+    backgroundColor: '#F97316',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 24,
+  },
+  loanTitle: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  loanText: {
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: 14,
+    marginVertical: 8,
+  },
+  loanButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  applyButton: {
+    backgroundColor: 'white',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    flex: 1,
+    marginRight: 8,
+  },
+  applyButtonText: {
+    color: '#F97316',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  howToLoanButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'white',
+  },
+  howToLoanButtonText: {
+    color: 'white',
+    fontWeight: '600',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  seeAllText: {
+    color: '#8B5CF6',
+    fontSize: 14,
+  },
+  transactionList: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+  },
+  transactionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  transactionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#EDE9FE',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  transactionIconText: {
+    fontSize: 18,
+  },
+  transactionDetails: {
+    flex: 1,
+  },
+  transactionType: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1F2937',
+  },
+  transactionDate: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  transactionAmountContainer: {
+    alignItems: 'flex-end',
+  },
+  transactionAmount: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  transactionStatus: {
+    fontSize: 12,
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  statusCompleted: {
+    color: '#10B981',
+  },
+  statusPending: {
+    color: '#F59E0B',
+  },
+  bottomNav: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingVertical: 8,
+  },
+  navItem: {
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
+  navIcon: {
+    marginBottom: 4,
+  },
+  navIconText: {
+    fontSize: 20,
+  },
+  navText: {
+    color: '#9CA3AF',
+    fontSize: 12,
+  },
+  navTextActive: {
+    color: '#8B5CF6',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+
+  profileContent: {
+    padding: 20,
+    flexGrow: 1,
+  },
+  avatarContainer: {
+    alignItems: 'center',
+    marginBottom: 30,
+    marginTop: 20,
+  },
+  avatar: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    marginBottom: 15,
+  },
+  emptyAvatar: {
+    backgroundColor: '#E5E7EB',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  name: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 5,
+  },
+  email: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  detailsContainer: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 20,
+  },
+  detailItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  detailLabel: {
+    color: '#6B7280',
+    fontSize: 14,
+  },
+  detailValue: {
+    color: '#1F2937',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  activeStatus: {
+    color: '#10B981',
+  },
+  settingsButton: {
+    backgroundColor: '#E5E7EB',
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  settingsButtonText: {
+    color: '#1F2937',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  logoutButton: {
+    backgroundColor: '#EF4444',
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  logoutButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  backButton: {
+    fontSize: 24,
+    color: '#374151',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+
+  // Modal Styles
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  modalHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  markAllText: {
+    color: '#8B5CF6',
+    fontWeight: '500',
+  },
+  notificationsList: {
+    flex: 1,
+    padding: 16,
+  },
+  notificationItem: {
+    backgroundColor: 'white',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  notificationContent: {
+    flex: 1,
+  },
+  unreadNotification: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#8B5CF6',
+  },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#8B5CF6',
+    marginLeft: 8,
+  },
+  notificationTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  notificationMessage: {
+    fontSize: 14,
+    color: '#4B5563',
+    marginBottom: 4,
+  },
+  notificationTime: {
+    fontSize: 12,
+    color: '#9CA3AF',
+  },
+  emptyNotifications: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  emptyText: {
+    marginTop: 16,
+    color: '#6B7280',
+    fontSize: 16,
+  },
+
+  centeredView: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  walletModal: {
+    width: '90%',
+    maxHeight: '80%',
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 25,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  walletModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    color: '#1F2937',
+    textAlign: 'center',
+  },
+  walletBalance: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  inputContainer: {
+    marginBottom: 15,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+    marginBottom: 5,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    backgroundColor: '#F9FAFB',
+  },
+  bankList: {
+    maxHeight: 300,
+  },
+  walletActionButtonPrimary: {
+    backgroundColor: '#8B5CF6',
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  walletActionButtonPrimaryText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 15,
+    right: 15,
+    zIndex: 1,
+  },
+
+  qrCodeContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  qrCode: {
+    width: 150,
+    height: 150,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  merchantName: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#1F2937',
+  },
+
+  transactionHistoryList: {
+    flex: 1,
+    padding: 16,
+  },
+  transactionHistoryItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  transactionHistoryIcon: {
+    marginRight: 12,
+    marginTop: 4,
+  },
+  transactionHistoryDetails: {
+    flex: 1,
+  },
+  transactionHistoryType: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1F2937',
+  },
+  transactionHistoryDate: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  transactionHistoryExtra: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  transactionHistoryAmountContainer: {
+    alignItems: 'flex-end',
+  },
+  transactionHistoryAmount: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  transactionHistoryStatus: {
+    fontSize: 12,
+    color: '#10B981',
+    marginTop: 4,
+  },
+
+  creditScoreModal: {
+    width: '90%',
+    maxHeight: '80%',
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 25,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  creditScoreModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    color: '#1F2937',
+    textAlign: 'center',
+  },
+  creditBreakdownSection: {
+    marginBottom: 25,
+  },
+  modalSectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 15,
+  },
+  creditFactor: {
+    marginBottom: 15,
+  },
+  creditFactorHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 5,
+  },
+  creditFactorTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+  },
+  creditFactorPercentage: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  creditFactorStatus: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  benefitsSection: {
+    marginBottom: 25,
+  },
+  benefitText: {
+    fontSize: 14,
+    color: '#374151',
+    marginLeft: 10,
+    flex: 1,
+  },
+  actionButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  secondaryButton: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+  },
+  secondaryButtonText: {
+    color: '#374151',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  applyLoanButton: {
+    backgroundColor: '#8B5CF6',
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    flex: 1,
+  },
+  applyLoanButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+
+  // Loan Status Modal Styles
+  loanStatusModal: {
+    width: '90%',
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 25,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  loanStatusHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  loanStatusTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginTop: 10,
+  },
+  loanStatusText: {
+    fontSize: 14,
+    color: '#4B5563',
+    textAlign: 'center',
+    marginBottom: 15,
+    lineHeight: 20,
+  },
+  loanStatusSubtext: {
+    fontSize: 12,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  loanStatusDetails: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    padding: 15,
+    marginBottom: 20,
+  },
+  loanStatusDetailItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 5,
+  },
+  loanStatusDetailLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  loanStatusDetailValue: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1F2937',
+  },
+  loanStatusButton: {
+    backgroundColor: '#8B5CF6',
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  loanStatusButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+
+  // Wallet Actions Modal Styles
+  walletActionsModal: {
+    width: '90%',
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 25,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  walletActionsTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    color: '#1F2937',
+    textAlign: 'center',
+  },
+  walletActionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    flexWrap: 'wrap',
+  },
+  walletActionButton: {
+    alignItems: 'center',
+    padding: 20,
+    borderRadius: 12,
+    backgroundColor: '#F9FAFB',
+    width: '30%',
+    marginBottom: 15,
+  },
+  walletActionButtonText: {
+    fontSize: 12,
+    color: '#4B5563',
+    marginTop: 8,
+    fontWeight: '500',
+  },
+
+  // How to Loan Modal Styles
+  howToLoanModal: {
+    width: '95%',
+    height: '85%',
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 25,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  howToLoanModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    color: '#1F2937',
+    textAlign: 'center',
+  },
+  howToLoanContent: {
+    flex: 1,
+    marginBottom: 20,
+  },
+  featureSection: {
+    marginBottom: 20,
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  featureTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 8,
+  },
+  featureDescription: {
+    fontSize: 14,
+    color: '#4B5563',
+    lineHeight: 20,
+  },
+});
+
+export default DashboardScreen;

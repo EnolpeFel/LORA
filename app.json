@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "Your App",
+    "slug": "your-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "android": {
+      "package": "com.yourcompany.yourapp",
+      "versionCode": 3,
+      "permissions": []
+    },
+    "extra": {
+      "eas": {
+        "projectId": "6b2e3728-7424-4f98-a1d2-3fc9b115fa65"
+      }
+    },
+    "owner": "feldave",
+    "plugins": [
+      "expo-asset",
+      "expo-font"
+    ]
+  }
+}
