@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 // Mock data for loan history
 const LoanService = {
   getLoans: async () => {
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Simulate API delay
+    await new Promise(resolve => setTimeout(resolve, 500));
     
     // Return mock loan data with proper structure for PayNowScreen
     return [
@@ -19,22 +19,26 @@ const LoanService = {
         term: '12 months',
         remainingBalance: '120,000.00',
         nextPayment: 'Aug 5, 2023',
-        nextPaymentAmount: '12,500.00',
+        nextPaymentAmount: '13,750.00',
         lender: 'Lora Lending',
         type: 'Personal Loan',
         applicationDate: 'Jul 15, 2023',
         dueDate: 'Aug 5, 2023',
-        totalAmountDue: '12,500.00',
-        // Additional fields needed for PayNowScreen
+        totalAmountDue: '13,750.00',
         loanAmount: 150000,
-        totalInterest: 1250, // Monthly interest portion
+        totalInterest: 18000,
         interestType: 'Fixed Rate',
-        processingFee: 0, // No processing fee for monthly payments
-        monthlyPayment: '12,500.00',
-        totalPayment: 12500, // Monthly payment amount
+        processingFee: 2000,
+        monthlyPayment: '13,750.00',
+        totalPayment: 150000,
+        totalPayableAmount: 168000,
         netRelease: 148000,
         terms: '12 months',
-        date: 'Jul 15, 2023'
+        date: 'Jul 15, 2023',
+        paymentBreakdown: [
+          { description: 'Principal', amount: '12500.00' },
+          { description: 'Interest', amount: '1250.00' }
+        ]
       },
       {
         id: 'LN-2023-002',
@@ -44,22 +48,26 @@ const LoanService = {
         term: '6 months',
         remainingBalance: '45,000.00',
         nextPayment: 'Jul 25, 2023',
-        nextPaymentAmount: '7,500.00',
+        nextPaymentAmount: '13,125.00',
         lender: 'GCredit',
         type: 'Emergency Loan',
         applicationDate: 'Jun 20, 2023',
         dueDate: 'Jul 25, 2023',
-        totalAmountDue: '7,500.00',
-        // Additional fields needed for PayNowScreen
+        totalAmountDue: '13,125.00',
         loanAmount: 75000,
-        totalInterest: 625, // Monthly interest portion
+        totalInterest: 3750,
         interestType: 'Fixed Rate',
-        processingFee: 0, // No processing fee for monthly payments
-        monthlyPayment: '7,500.00',
-        totalPayment: 7500, // Monthly payment amount
-        netRelease: 74000,
+        processingFee: 1500,
+        monthlyPayment: '13,125.00',
+        totalPayment: 75000,
+        totalPayableAmount: 78750,
+        netRelease: 73500,
         terms: '6 months',
-        date: 'Jun 20, 2023'
+        date: 'Jun 20, 2023',
+        paymentBreakdown: [
+          { description: 'Principal', amount: '12500.00' },
+          { description: 'Interest', amount: '625.00' }
+        ]
       },
       {
         id: 'LN-2022-015',
@@ -75,16 +83,20 @@ const LoanService = {
         applicationDate: 'Jan 10, 2022',
         dueDate: 'Dec 15, 2023',
         totalAmountDue: '0.00',
-        // Additional fields needed for PayNowScreen
         loanAmount: 200000,
         totalInterest: 60000,
         interestType: 'Fixed Rate',
         processingFee: 3000,
-        monthlyPayment: '0.00',
-        totalPayment: 260000,
+        monthlyPayment: '10,833.33',
+        totalPayment: 200000,
+        totalPayableAmount: 260000,
         netRelease: 197000,
         terms: '24 months',
-        date: 'Jan 10, 2022'
+        date: 'Jan 10, 2022',
+        paymentBreakdown: [
+          { description: 'Principal', amount: '8333.33' },
+          { description: 'Interest', amount: '2500.00' }
+        ]
       },
       {
         id: 'LN-2023-003',
@@ -100,16 +112,17 @@ const LoanService = {
         applicationDate: 'Aug 1, 2023',
         dueDate: 'TBD',
         totalAmountDue: 'TBD',
-        // Additional fields needed for PayNowScreen
         loanAmount: 50000,
         totalInterest: 0,
         interestType: 'TBD',
         processingFee: 0,
         monthlyPayment: 'TBD',
         totalPayment: 0,
+        totalPayableAmount: 0,
         netRelease: 0,
         terms: '3 months',
-        date: 'Aug 1, 2023'
+        date: 'Aug 1, 2023',
+        paymentBreakdown: []
       }
     ];
   },
@@ -117,8 +130,8 @@ const LoanService = {
 
 const MyLoansScreen = ({ navigation }) => {
   const [loans, setLoans] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchLoans();
@@ -126,11 +139,12 @@ const MyLoansScreen = ({ navigation }) => {
 
   const fetchLoans = async () => {
     try {
+      setLoading(true);
       const loanData = await LoanService.getLoans();
       setLoans(loanData);
     } catch (error) {
       Alert.alert('Error', 'Failed to fetch loans. Please try again.');
-      console.error(error);
+      console.error('Error fetching loans:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -142,38 +156,141 @@ const MyLoansScreen = ({ navigation }) => {
     fetchLoans();
   };
 
+  const parseAmount = (amountStr) => {
+    if (!amountStr || amountStr === 'N/A' || amountStr === 'TBD') return 0;
+    const cleanStr = String(amountStr).replace(/,/g, '');
+    return parseFloat(cleanStr) || 0;
+  };
+
   const handleLoanPress = (loan) => {
-    // Map the loan data to the format expected by PayNowScreen
+    if (!navigation || typeof navigation.navigate !== 'function') {
+      Alert.alert('Error', 'Navigation not available');
+      return;
+    }
+
+    // For Processing loans, show loan details without payment option
+    if (loan.status === 'Processing' || loan.status === 'Pending') {
+      Alert.alert(
+        'Loan Application',
+        `Loan ID: ${loan.id}\nStatus: ${loan.status}\nAmount: ₱${loan.amount}\n\nYour loan is being processed. You will be notified once it's approved.`,
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    // For Completed loans, show completion message
+    if (loan.status === 'Completed') {
+      Alert.alert(
+        'Loan Completed',
+        `Loan ID: ${loan.id}\n\nThis loan has been fully paid.\n\nOriginal Amount: ₱${loan.amount}\nFinal Payment: ${loan.dueDate}`,
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    // For Active loans, don't do anything on card press
+    // User must click the Pay Now button
+  };
+
+  const handlePayNow = (loan) => {
+    if (!navigation || typeof navigation.navigate !== 'function') {
+      Alert.alert('Error', 'Navigation not available');
+      return;
+    }
+
+    // Only allow payment for Active loans
+    if (loan.status !== 'Active') {
+      return;
+    }
+
+    // Parse amounts
+    const monthlyPaymentAmount = parseAmount(loan.monthlyPayment);
+    const remainingBalanceAmount = parseAmount(loan.remainingBalance);
+    
+    // Calculate principal and interest from payment breakdown
+    let principalAmount = 0;
+    let interestAmount = 0;
+    
+    if (loan.paymentBreakdown && loan.paymentBreakdown.length > 0) {
+      const principalBreakdown = loan.paymentBreakdown.find(item => 
+        item.description.toLowerCase().includes('principal')
+      );
+      const interestBreakdown = loan.paymentBreakdown.find(item => 
+        item.description.toLowerCase().includes('interest')
+      );
+      
+      if (principalBreakdown) {
+        principalAmount = parseAmount(principalBreakdown.amount);
+      }
+      if (interestBreakdown) {
+        interestAmount = parseAmount(interestBreakdown.amount);
+      }
+    } else {
+      // Default calculation if no breakdown
+      principalAmount = monthlyPaymentAmount * 0.85;
+      interestAmount = monthlyPaymentAmount * 0.15;
+    }
+
+    // Calculate payments remaining
+    const paymentsRemaining = remainingBalanceAmount > 0 && monthlyPaymentAmount > 0 
+      ? Math.ceil(remainingBalanceAmount / principalAmount) 
+      : 0;
+
+    // Parse term to get total payments
+    const termMatch = (loan.term || '').match(/(\d+)/);
+    const totalPayments = termMatch ? parseInt(termMatch[1]) : 12;
+    const paymentsCompleted = totalPayments - paymentsRemaining;
+
+    // Map the loan data
     const mappedLoanData = {
       id: loan.id,
       amount: loan.amount,
       status: loan.status,
       interestRate: loan.interestRate,
-      terms: loan.term, // Map 'term' to 'terms'
+      terms: loan.term,
       lender: loan.lender,
       type: loan.type,
       dueDate: loan.dueDate,
-      date: loan.applicationDate, // Map applicationDate to date
+      date: loan.applicationDate,
       loanAmount: loan.loanAmount,
       totalInterest: loan.totalInterest,
       interestType: loan.interestType,
       processingFee: loan.processingFee,
       monthlyPayment: loan.monthlyPayment,
       totalPayment: loan.totalPayment,
+      totalPayableAmount: loan.totalPayableAmount,
       netRelease: loan.netRelease,
-      // Additional fields for billing calculation
-      monthlyIncome: 'N/A',
-      collateral: 'N/A'
+      paymentBreakdown: loan.paymentBreakdown || [],
+      remainingBalance: remainingBalanceAmount,
+      nextPayment: loan.nextPayment,
+      nextPaymentAmount: loan.nextPaymentAmount,
+      totalAmountDue: parseAmount(loan.totalAmountDue),
+      nextDueDate: loan.dueDate,
+      paymentsCompleted: paymentsCompleted > 0 ? paymentsCompleted : 1,
+      paymentsRemaining: paymentsRemaining > 0 ? paymentsRemaining : totalPayments - 1
     };
 
-    // Navigate to PayNow with the properly mapped loan data
+    // Create billing info
+    const billingInfo = {
+      basePayment: monthlyPaymentAmount,
+      principalAmount: principalAmount,
+      interestAmount: interestAmount,
+      lateFees: 0,
+      totalAmountDue: monthlyPaymentAmount,
+      daysLate: 0
+    };
+
+    // Navigate to PayNow
     navigation.navigate('PayNow', { 
-      loanApplication: mappedLoanData 
+      loanApplication: mappedLoanData,
+      billingInfo: billingInfo,
+      transactions: []
     });
   };
 
   const getStatusColor = (status) => {
-    switch (status.toLowerCase()) {
+    const statusLower = (status || '').toLowerCase();
+    switch (statusLower) {
       case 'active':
         return { backgroundColor: '#DCFCE7', color: '#166534' };
       case 'processing':
@@ -186,83 +303,118 @@ const MyLoansScreen = ({ navigation }) => {
     }
   };
 
-  const renderLoanCard = (loan) => (
-    <TouchableOpacity 
-      key={loan.id}
-      style={styles.loanCard}
-      onPress={() => handleLoanPress(loan)}
-    >
-      <View style={styles.loanHeader}>
-        <Text style={styles.loanId}>{loan.id}</Text>
-        <Text style={[styles.loanStatus, getStatusColor(loan.status)]}>
-          {loan.status}
-        </Text>
-      </View>
+  const calculateMonthlyInterest = (loan) => {
+    if (!loan || loan.status !== 'Active' || loan.interestRate === 'TBD') {
+      return 'N/A';
+    }
+    
+    try {
+      const remainingBalanceStr = (loan.remainingBalance || '0').replace(/,/g, '');
+      const principal = parseFloat(remainingBalanceStr) || loan.loanAmount || 0;
+      const interestRateNum = parseFloat(loan.interestRate);
       
-      <Text style={styles.loanAmount}>PHP {loan.amount}</Text>
+      if (isNaN(principal) || isNaN(interestRateNum) || principal <= 0) {
+        return 'N/A';
+      }
       
-      <View style={styles.loanDetails}>
-        <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>Lender</Text>
-          <Text style={styles.detailValue}>{loan.lender}</Text>
-        </View>
-        <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>Type</Text>
-          <Text style={styles.detailValue}>{loan.type}</Text>
-        </View>
-        <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>Term</Text>
-          <Text style={styles.detailValue}>{loan.term}</Text>
-        </View>
-        <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>Interest Rate</Text>
-          <Text style={styles.detailValue}>
-            {loan.interestRate === 'TBD' ? 'TBD' : `${loan.interestRate}%`}
-          </Text>
-        </View>
-      </View>
+      const annualRate = interestRateNum / 100;
+      const monthlyRate = annualRate / 12;
+      const monthlyInterest = principal * monthlyRate;
       
-      <View style={styles.loanDetails}>
-        <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>Application Date</Text>
-          <Text style={styles.detailValue}>{loan.applicationDate}</Text>
-        </View>
-        <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>Due Date</Text>
-          <Text style={styles.detailValue}>{loan.dueDate}</Text>
-        </View>
-        <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>Remaining Balance</Text>
-          <Text style={styles.detailValue}>
-            {loan.remainingBalance === 'N/A' ? 'N/A' : `PHP ${loan.remainingBalance}`}
-          </Text>
-        </View>
-        <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>Next Payment</Text>
-          <Text style={styles.detailValue}>
-            {loan.nextPaymentAmount === 'TBD' ? 'TBD' : `PHP ${loan.nextPaymentAmount}`}
-          </Text>
-        </View>
-      </View>
-      
-      <TouchableOpacity 
-        style={[
-          styles.actionButton,
-          loan.status === 'Active' ? styles.payNowButton : 
-          loan.status === 'Processing' ? styles.viewButton : styles.viewButton
-        ]}
-        onPress={() => handleLoanPress(loan)}
+      return `₱${monthlyInterest.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    } catch (error) {
+      console.error('Error calculating monthly interest:', error);
+      return 'N/A';
+    }
+  };
+
+  const formatCurrency = (value) => {
+    if (!value || value === 'N/A' || value === 'TBD') return value;
+    return `₱${value}`;
+  };
+
+  const renderLoanCard = (loan) => {
+    if (!loan) return null;
+
+    const statusColors = getStatusColor(loan.status);
+
+    return (
+      <View 
+        key={loan.id}
+        style={styles.loanCard}
       >
-        <Text style={[
-          styles.actionButtonText,
-          loan.status === 'Active' ? styles.payNowButtonText : styles.viewButtonText
-        ]}>
-          {loan.status === 'Active' ? 'Pay Now' : 
-           loan.status === 'Processing' ? 'View Details' : 'View Receipt'}
-        </Text>
-      </TouchableOpacity>
-    </TouchableOpacity>
-  );
+        <TouchableOpacity 
+          onPress={() => handleLoanPress(loan)}
+          activeOpacity={loan.status === 'Active' ? 1 : 0.7}
+        >
+          <View style={styles.loanHeader}>
+            <Text style={styles.loanId}>{loan.id || 'N/A'}</Text>
+            <View style={[styles.loanStatus, { backgroundColor: statusColors.backgroundColor }]}>
+              <Text style={[styles.loanStatusText, { color: statusColors.color }]}>
+                {loan.status || 'Unknown'}
+              </Text>
+            </View>
+          </View>
+          
+          <Text style={styles.loanAmount}>{formatCurrency(loan.amount)}</Text>
+          
+          <View style={styles.loanDetails}>
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Lender</Text>
+              <Text style={styles.detailValue}>{loan.lender || 'N/A'}</Text>
+            </View>
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Type</Text>
+              <Text style={styles.detailValue}>{loan.type || 'N/A'}</Text>
+            </View>
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Term</Text>
+              <Text style={styles.detailValue}>{loan.term || 'N/A'}</Text>
+            </View>
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Interest Rate</Text>
+              <Text style={styles.detailValue}>
+                {loan.interestRate === 'TBD' ? 'TBD' : `${loan.interestRate}%`}
+              </Text>
+            </View>
+          </View>
+          
+          <View style={styles.loanDetails}>
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Application Date</Text>
+              <Text style={styles.detailValue}>{loan.applicationDate || 'N/A'}</Text>
+            </View>
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Due Date</Text>
+              <Text style={styles.detailValue}>{loan.dueDate || 'N/A'}</Text>
+            </View>
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Remaining Balance</Text>
+              <Text style={styles.detailValue}>
+                {loan.remainingBalance === 'N/A' ? 'N/A' : formatCurrency(loan.remainingBalance)}
+              </Text>
+            </View>
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Monthly Payment</Text>
+              <Text style={styles.detailValue}>
+                {loan.monthlyPayment === 'TBD' ? 'TBD' : formatCurrency(loan.monthlyPayment)}
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+        
+        {loan.status === 'Active' && (
+          <TouchableOpacity
+            style={styles.payNowButton}
+            onPress={() => handlePayNow(loan)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.actionButtonText}>Pay Now</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  };
 
   if (loading) {
     return (
@@ -285,11 +437,12 @@ const MyLoansScreen = ({ navigation }) => {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.headerContainer}>
         <TouchableOpacity 
           style={styles.backButton}
-          onPress={() => navigation.goBack()}
+          onPress={() => navigation?.goBack && navigation.goBack()}
+          activeOpacity={0.7}
         >
           <Ionicons name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
@@ -299,10 +452,20 @@ const MyLoansScreen = ({ navigation }) => {
       <ScrollView 
         contentContainerStyle={styles.content}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={handleRefresh}
+            colors={['#8B5CF6']}
+            tintColor="#8B5CF6"
+          />
         }
+        showsVerticalScrollIndicator={false}
       >
-        {loans.length > 0 ? (
+        {loading && loans.length === 0 ? (
+          <View style={styles.loadingState}>
+            <Text style={styles.loadingText}>Loading loans...</Text>
+          </View>
+        ) : loans.length > 0 ? (
           loans.map(loan => renderLoanCard(loan))
         ) : (
           <View style={styles.emptyState}>
@@ -333,6 +496,7 @@ const styles = StyleSheet.create({
   },
   backButton: {
     marginRight: 12,
+    padding: 4,
   },
   header: {
     fontSize: 22,
@@ -366,11 +530,14 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   loanStatus: {
-    fontSize: 12,
-    fontWeight: '600',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
+    textTransform: 'uppercase',
+  },
+  loanStatusText: {
+    fontSize: 12,
+    fontWeight: '600',
     textTransform: 'uppercase',
   },
   loanAmount: {
@@ -409,6 +576,11 @@ const styles = StyleSheet.create({
   },
   payNowButton: {
     backgroundColor: '#8B5CF6',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 12,
   },
   viewButton: {
     backgroundColor: '#4F46E5',
@@ -416,6 +588,34 @@ const styles = StyleSheet.create({
   actionButtonText: {
     fontSize: 16,
     fontWeight: '600',
+    color: 'white',
+  },
+  loadingState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#666',
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+  },
+  emptyStateText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#666',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
+    lineHeight: 20,
   },
   payNowButtonText: {
     color: 'white',
