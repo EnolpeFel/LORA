@@ -1,444 +1,326 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Linking, TextInput, Platform } from 'react-native';
+import React, { useState, useContext } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  Alert,
+  TextInput,
+  Modal,
+  Dimensions
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
+import { ThemeContext } from './DashboardScreen';
 
-const CashInScreen = ({ navigation }) => {
-  const [amount, setAmount] = useState('');
-  const [selectedMethod, setSelectedMethod] = useState(null);
+const { width } = Dimensions.get('window');
 
-  const quickAmounts = [100, 500, 1000, 2000, 5000];
+const CASHIN_METHODS = [
+  { id: 'gcash', name: 'GCash', iconName: 'account-balance-wallet', color: '#007DFF', fee: 'No fee' },
+  { id: 'maya',  name: 'Maya',  iconName: 'account-balance-wallet', color: '#00D632', fee: 'No fee' },
+];
 
-  const cashInMethods = [
-    { 
-      id: 1, 
-      name: 'GCash', 
-      icon: 'account-balance-wallet',
-      color: '#007DFF',
-      gradient: ['#007DFF', '#0051D5'],
-      fee: 'No fee',
-      deepLink: 'gcash://cashin',
-      webLink: 'https://m.gcash.com',
-      packageName: 'com.globe.gcash.android'
-    },
-    { 
-      id: 2, 
-      name: 'Maya', 
-      icon: 'account-balance-wallet',
-      color: '#00D632',
-      gradient: ['#00D632', '#00A826'],
-      fee: 'No fee',
-      deepLink: 'maya://cashin',
-      webLink: 'https://maya.ph',
-      packageName: 'com.paymaya'
-    },
-  ];
+const CashInScreen = ({ navigation, route }) => {
+  const { dark } = useContext(ThemeContext);
+  const [ciAmount, setCiAmount] = useState('');
+  const [ciMethod, setCiMethod] = useState(null);
 
-  const openEWalletApp = async (method, cashInAmount) => {
-    try {
-      const canOpen = await Linking.canOpenURL(method.deepLink);
-      
-      if (canOpen) {
-        await Linking.openURL(method.deepLink);
-        
-        Alert.alert(
-          'Complete Payment',
-          `Please complete your ₱${cashInAmount.toFixed(2)} cash-in transaction in the ${method.name} app.`,
-          [
-            {
-              text: 'Done',
-              onPress: () => {
-                Alert.alert('Success', `Cash in of ₱${cashInAmount.toFixed(2)} via ${method.name} is being processed`);
-                navigation.goBack();
-              }
-            }
-          ]
-        );
-      } else {
-        Alert.alert(
-          `${method.name} Not Installed`,
-          `The ${method.name} app is not installed. Would you like to:`,
-          [
-            {
-              text: 'Cancel',
-              style: 'cancel'
-            },
-            {
-              text: 'Open Web Version',
-              onPress: () => Linking.openURL(method.webLink)
-            },
-            {
-              text: 'Install App',
-              onPress: () => {
-                const storeUrl = Platform.OS === 'ios' 
-                  ? `https://apps.apple.com/app/${method.packageName}`
-                  : `https://play.google.com/store/apps/details?id=${method.packageName}`;
-                Linking.openURL(storeUrl);
-              }
-            }
-          ]
-        );
-      }
-    } catch (error) {
-      Alert.alert('Error', `Unable to open ${method.name}. Please try again.`);
-      console.error('Deep link error:', error);
-    }
+  // Colour palette (matches Dashboard)
+  const C = {
+    bg:           dark ? '#0F172A' : '#F3F4F6',
+    card:         dark ? '#1E293B' : '#FFFFFF',
+    border:       dark ? '#334155' : '#E5E7EB',
+    text:         dark ? '#F1F5F9' : '#1F2937',
+    subtext:      dark ? '#94A3B8' : '#6B7280',
+    faint:        dark ? '#334155' : '#F9FAFB',
+    headerBg:     dark ? '#1E293B' : '#FFFFFF',
+    modalBg:      dark ? '#1E293B' : '#FFFFFF',
+    inputBg:      dark ? '#0F172A' : '#F9FAFB',
+    inputBorder:  dark ? '#334155' : '#E5E7EB',
+    purple:       '#FB923C',
+    green:        '#10B981',
+    amber:        '#F59E0B',
+    red:          '#EF4444',
   };
 
   const handleCashIn = () => {
-    if (!amount || !selectedMethod) {
-      Alert.alert('Error', 'Please select a method and enter amount');
+    const amt = parseFloat(ciAmount) || 0;
+    if (!ciAmount || amt <= 0) {
+      Alert.alert('Invalid Amount', 'Please enter a valid amount');
       return;
     }
-    
-    const cashInAmount = parseFloat(amount);
-    if (isNaN(cashInAmount) || cashInAmount <= 0) {
-      Alert.alert('Error', 'Please enter a valid amount');
+    if (!ciMethod) {
+      Alert.alert('Select Method', 'Please select a payment method');
       return;
+    }
+
+    // Callback to parent with transaction data
+    if (route.params?.onCashIn) {
+      route.params.onCashIn({
+        amount: amt,
+        method: ciMethod.name,
+        date: new Date().toISOString(),
+      });
     }
 
     Alert.alert(
-      'Confirm Cash In',
-      `Cash in ₱${cashInAmount.toFixed(2)} via ${selectedMethod.name}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Confirm', 
-          onPress: () => openEWalletApp(selectedMethod, cashInAmount)
-        }
-      ]
+      'Cash In Successful',
+      `₱${amt.toFixed(2)} added via ${ciMethod.name}`,
+      [{ text: 'OK', onPress: () => navigation.goBack() }]
     );
   };
 
-  const setQuickAmount = (value) => {
-    setAmount(value.toString());
-  };
-
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={[styles.root, { backgroundColor: C.bg }]} edges={['top']}>
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity 
-          onPress={() => navigation.goBack()}
-          style={styles.backButton}
-        >
-          <MaterialIcons name="arrow-back" size={24} color="#1F2937" />
+      <View style={[styles.header, { backgroundColor: C.headerBg, borderBottomColor: C.border }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 4 }}>
+          <MaterialIcons name="arrow-back" size={24} color={C.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Cash In</Text>
-        <View style={{ width: 40 }} />
+        <Text style={[styles.headerTitle, { color: C.text }]}>Cash In</Text>
+        <View style={{ width: 32 }} />
       </View>
 
-      <ScrollView 
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Amount Input Card */}
-        <View style={styles.amountCard}>
-          <Text style={styles.amountLabel}>Enter Amount</Text>
-          <View style={styles.amountInputWrapper}>
-            <Text style={styles.currencySymbol}>₱</Text>
-            <TextInput
-              style={styles.amountInput}
-              placeholder="0.00"
-              placeholderTextColor="#9CA3AF"
-              keyboardType="decimal-pad"
-              value={amount}
-              onChangeText={setAmount}
-            />
-          </View>
-          
-          {/* Quick Amount Buttons */}
-          <View style={styles.quickAmountsContainer}>
-            {quickAmounts.map((value) => (
-              <TouchableOpacity
-                key={value}
-                style={styles.quickAmountButton}
-                onPress={() => setQuickAmount(value)}
-              >
-                <Text style={styles.quickAmountText}>₱{value}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Balance Banner */}
+        <View style={[styles.balBanner, { backgroundColor: dark ? '#431407' : '#FFF7ED' }]}>
+          <MaterialIcons name="account-balance-wallet" size={15} color={C.purple} />
+          <Text style={[styles.balBannerTxt, { color: C.purple }]}>
+            Balance: ₱{route.params?.balance?.toFixed(2) || '0.00'}
+          </Text>
         </View>
 
-        {/* Payment Methods */}
-        <View style={styles.methodsSection}>
-          <Text style={styles.sectionTitle}>Select Payment Method</Text>
-          
-          {cashInMethods.map(method => (
+        {/* Points Banner */}
+        <View style={[styles.pointsBanner, { 
+          backgroundColor: dark ? '#2D2005' : '#FFFBEB', 
+          borderColor: dark ? '#78350F' : '#FDE68A' 
+        }]}>
+          <MaterialIcons name="stars" size={15} color="#F59E0B" />
+          <Text style={[styles.pointsBannerTxt, { color: dark ? '#FDE68A' : '#92400E' }]}>
+            Cash in ₱1,000+ to earn +5 credit points!
+          </Text>
+        </View>
+
+        {/* Amount Input */}
+        <Text style={[styles.label, { color: C.subtext }]}>Amount</Text>
+        <View style={[styles.amtRow, { borderColor: C.inputBorder, backgroundColor: C.inputBg }]}>
+          <Text style={[styles.currPfx, { color: C.text }]}>₱</Text>
+          <TextInput
+            style={[styles.amtInput, { color: C.text }]}
+            placeholder="0.00"
+            placeholderTextColor={C.subtext}
+            keyboardType="decimal-pad"
+            value={ciAmount}
+            onChangeText={setCiAmount}
+          />
+        </View>
+
+        {/* Quick Amounts */}
+        <View style={styles.quickRow}>
+          {[500, 1000, 2000, 5000].map(v => (
             <TouchableOpacity
-              key={method.id}
-              style={[
-                styles.methodCard,
-                selectedMethod?.id === method.id && styles.selectedMethodCard
-              ]}
-              onPress={() => setSelectedMethod(method)}
-              activeOpacity={0.7}
+              key={v}
+              style={[styles.quickBtn, { borderColor: C.border, backgroundColor: C.faint }]}
+              onPress={() => setCiAmount(v.toString())}
             >
-              <View style={styles.methodContent}>
-                <View style={[styles.iconContainer, { backgroundColor: method.color + '15' }]}>
-                  <MaterialIcons 
-                    name={method.icon} 
-                    size={28} 
-                    color={method.color} 
-                  />
-                </View>
-                <View style={styles.methodDetails}>
-                  <Text style={styles.methodName}>{method.name}</Text>
-                  <Text style={styles.methodFee}>{method.fee}</Text>
-                </View>
-                <View style={[
-                  styles.radioButton,
-                  selectedMethod?.id === method.id && styles.radioButtonSelected
-                ]}>
-                  {selectedMethod?.id === method.id && (
-                    <View style={styles.radioButtonInner} />
-                  )}
-                </View>
-              </View>
+              <Text style={[styles.quickBtnTxt, { color: C.text }]}>₱{v}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* Info Box */}
-        <View style={styles.infoBox}>
-          <MaterialIcons name="info-outline" size={20} color="#3B82F6" />
-          <Text style={styles.infoText}>
-            You will be redirected to complete the payment in your selected e-wallet app
-          </Text>
-        </View>
+        {/* Payment Methods */}
+        <Text style={[styles.label, { color: C.subtext }]}>Select E-Wallet</Text>
+        {CASHIN_METHODS.map(m => (
+          <TouchableOpacity
+            key={m.id}
+            style={[
+              styles.bankCard,
+              { borderColor: ciMethod?.id === m.id ? C.purple : C.border },
+              ciMethod?.id === m.id && { backgroundColor: dark ? '#431407' : '#FFF7ED' }
+            ]}
+            onPress={() => setCiMethod(m)}
+          >
+            <MaterialIcons name={m.iconName} size={26} color={m.color} style={{ marginRight: 12 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.bankName, { color: C.text }]}>{m.name}</Text>
+              <Text style={[styles.bankMeta, { color: C.subtext }]}>{m.fee}</Text>
+            </View>
+            {ciMethod?.id === m.id && (
+              <MaterialIcons name="check-circle" size={20} color={C.purple} />
+            )}
+          </TouchableOpacity>
+        ))}
+
+        {/* Fee Info */}
+        {ciAmount && parseFloat(ciAmount) >= 1000 && (
+          <View style={[styles.feeBox, { backgroundColor: C.faint }]}>
+            <View style={styles.feeRow}>
+              <Text style={[styles.feeLbl, { color: C.subtext }]}>Points Reward</Text>
+              <Text style={[styles.feeVal, { color: C.green }]}>+5 pts</Text>
+            </View>
+          </View>
+        )}
       </ScrollView>
 
       {/* Bottom Button */}
-      <View style={styles.bottomContainer}>
-        <TouchableOpacity 
+      <View style={[styles.bottomBar, { backgroundColor: C.card, borderTopColor: C.border }]}>
+        <TouchableOpacity
           style={[
-            styles.cashInButton,
-            (!amount || !selectedMethod) && styles.disabledButton
+            styles.primaryBtn,
+            (!ciAmount || !ciMethod) && styles.disabledBtn
           ]}
           onPress={handleCashIn}
-          disabled={!amount || !selectedMethod}
-          activeOpacity={0.8}
+          disabled={!ciAmount || !ciMethod}
         >
-          <Text style={styles.cashInButtonText}>
-            Continue to {selectedMethod ? selectedMethod.name : 'Payment'}
+          <Text style={styles.primaryBtnTxt}>
+            Add ₱{ciAmount || '0.00'} to Wallet
           </Text>
-          <MaterialIcons name="arrow-forward" size={20} color="white" />
         </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8F9FA',
-  },
+  root: { flex: 1 },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 16,
-    backgroundColor: 'white',
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
+    fontWeight: '700',
   },
-  content: {
+  scrollContent: {
     padding: 16,
-    paddingBottom: 100,
+    paddingBottom: 90,
   },
-  amountCard: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  amountLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 12,
-    fontWeight: '500',
-  },
-  amountInputWrapper: {
+  balBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderBottomWidth: 2,
-    borderBottomColor: '#E5E7EB',
-    paddingBottom: 8,
-    marginBottom: 16,
+    gap: 6,
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 12,
   },
-  currencySymbol: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    marginRight: 8,
+  balBannerTxt: {
+    fontSize: 13,
+    fontWeight: '600',
   },
-  amountInput: {
-    flex: 1,
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    padding: 0,
-  },
-  quickAmountsContainer: {
+  pointsBanner: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  quickAmountButton: {
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 8,
+    padding: 8,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  quickAmountText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#4B5563',
-  },
-  methodsSection: {
     marginBottom: 16,
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 12,
+  pointsBannerTxt: {
+    fontSize: 12,
+    flex: 1,
   },
-  methodCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
+  label: {
+    fontSize: 13,
+    fontWeight: '500',
+    marginTop: 16,
+    marginBottom: 6,
   },
-  selectedMethodCard: {
-    borderColor: '#3B82F6',
-    backgroundColor: '#EFF6FF',
-  },
-  methodContent: {
+  amtRow: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  iconContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  methodDetails: {
-    flex: 1,
-    marginLeft: 16,
-  },
-  methodName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingLeft: 12,
     marginBottom: 4,
   },
-  methodFee: {
-    fontSize: 13,
-    color: '#6B7280',
+  currPfx: {
+    fontSize: 18,
+    fontWeight: '800',
+    marginRight: 4,
   },
-  radioButton: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#D1D5DB',
-    justifyContent: 'center',
+  amtInput: {
+    flex: 1,
+    fontSize: 22,
+    fontWeight: '700',
+    padding: 12,
+  },
+  quickRow: {
+    flexDirection: 'row',
+    gap: 7,
+    marginBottom: 8,
+  },
+  quickBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 7,
     alignItems: 'center',
   },
-  radioButtonSelected: {
-    borderColor: '#3B82F6',
+  quickBtnTxt: {
+    fontSize: 12,
+    fontWeight: '600',
   },
-  radioButtonInner: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#3B82F6',
-  },
-  infoBox: {
+  bankCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EFF6FF',
-    padding: 12,
-    borderRadius: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: '#3B82F6',
+    borderWidth: 1.5,
+    borderRadius: 12,
+    padding: 13,
+    marginBottom: 8,
   },
-  infoText: {
-    flex: 1,
+  bankName: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  bankMeta: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  feeBox: {
+    borderRadius: 10,
+    padding: 13,
+    marginTop: 10,
+  },
+  feeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  feeLbl: {
     fontSize: 13,
-    color: '#1E40AF',
-    marginLeft: 8,
-    lineHeight: 18,
   },
-  bottomContainer: {
+  feeVal: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  bottomBar: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'white',
     padding: 16,
     paddingBottom: 20,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 5,
   },
-  cashInButton: {
-    backgroundColor: '#3B82F6',
-    paddingVertical: 16,
-    borderRadius: 12,
-    flexDirection: 'row',
-    justifyContent: 'center',
+  primaryBtn: {
+    backgroundColor: '#FB923C',
+    padding: 14,
+    borderRadius: 11,
     alignItems: 'center',
-    gap: 8,
-    shadowColor: '#3B82F6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
   },
-  disabledButton: {
-    backgroundColor: '#D1D5DB',
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  cashInButtonText: {
+  primaryBtnTxt: {
     color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  disabledBtn: {
+    backgroundColor: '#FED7AA',
   },
 });
 

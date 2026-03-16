@@ -14,10 +14,9 @@ import CashInScreen from "./screens/CashInScreen";
 import PayNowScreen from "./screens/PayNowScreen";
 import CreditReportScreen from "./screens/CreditReportScreen";
 import ProfileScreen from "./screens/ProfileScreen";
-import FaceRecognitionScreen from "./screens/FaceRecognitionScreen";
 
 import CurrentLoanScreen from "./screens/CurrentLoanScreen";
-
+import LoanDetailScreen from "./screens/LoanDetailScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -25,74 +24,23 @@ export default function App() {
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {/* Authentication */}
-        <Stack.Screen 
-          name="Welcome" 
-          component={WelcomeScreen} 
-        />
-        <Stack.Screen 
-          name="Login" 
-          component={LoginScreen} 
-        />
-        <Stack.Screen 
-          name="CreateAccount" 
-          component={CreateAccountScreen} 
-        />
-
-        <Stack.Screen name="FaceRecognition" component={FaceRecognitionScreen} />
-       
-        {/* Main App Screens */}
-        <Stack.Screen 
-          name="Dashboard" 
-          component={DashboardScreen} 
-        />
-        <Stack.Screen name="CurrentLoan" component={CurrentLoanScreen} />
-        <Stack.Screen
-          name="CreditReport" 
-          component={CreditReportScreen}
-          options={{
-            headerShown: false,
-            presentation: 'modal' // Optional: makes it slide up like a modal
-          }}
-          />
-        <Stack.Screen
-          name="Profile" 
-          component={ProfileScreen} 
-        />
-        <Stack.Screen 
-          name="Loans" 
-          component={LoansScreen} 
-        />
-        <Stack.Screen 
-          name="MyLoan" 
-          component={MyLoanScreen} 
-        />
-        <Stack.Screen 
-          name="LoanApplication" 
-          component={LoanApplicationScreen} 
-        />
-        <Stack.Screen 
-          name="Transactions" 
-          component={TransactionsScreen} 
-        />
+        <Stack.Screen name="Welcome"         component={WelcomeScreen} />
+        <Stack.Screen name="Login"           component={LoginScreen} />
+        <Stack.Screen name="CreateAccount"   component={CreateAccountScreen} />
         
-        {/* Payment Related Screens */}
-        <Stack.Screen 
-          name="PayNow" 
-          component={PayNowScreen} 
-        />
-        <Stack.Screen 
-          name="Transfer" 
-          component={TransferScreen} 
-        />
-        <Stack.Screen 
-          name="PayQR" 
-          component={QRPayScreen} 
-        />
-        <Stack.Screen 
-          name="CashIn" 
-          component={CashInScreen} 
-        />
+        <Stack.Screen name="Dashboard"       component={DashboardScreen} />
+        <Stack.Screen name="CurrentLoan"     component={CurrentLoanScreen} />
+        <Stack.Screen name="CreditReport"    component={CreditReportScreen} options={{ headerShown: false, presentation: 'modal' }} />
+        <Stack.Screen name="Profile"         component={ProfileScreen} />
+        <Stack.Screen name="Loans"           component={LoansScreen} />
+        <Stack.Screen name="LoanDetail"      component={LoanDetailScreen} />
+        <Stack.Screen name="MyLoan"          component={MyLoanScreen} />
+        <Stack.Screen name="LoanApplication" component={LoanApplicationScreen} />
+        <Stack.Screen name="Transactions"    component={TransactionsScreen} />
+        <Stack.Screen name="PayNow"          component={PayNowScreen} />
+        <Stack.Screen name="Transfer"        component={TransferScreen} />
+        <Stack.Screen name="QRPay"           component={QRPayScreen} />
+        <Stack.Screen name="CashIn"          component={CashInScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

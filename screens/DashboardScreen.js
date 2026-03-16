@@ -1,3217 +1,971 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Dimensions, 
-  Image, 
-  ScrollView, 
-  StyleSheet, 
-  Text, 
-  TouchableOpacity, 
-  View,
-  Modal,
-  TextInput,
-  Alert
+import React, { useState, useEffect, useRef, createContext } from 'react';
+import {
+  Dimensions, Image, ScrollView, StyleSheet, Switch,
+  Text, TouchableOpacity, View, Modal, TextInput, Alert,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
-import ProfileScreen from './ProfileScreen';
+import LoanStore, { getCreditTier, fmtCurrency, CREDIT_TIERS } from './Loanstore.js';
 
 const { width } = Dimensions.get('window');
 
-const DashboardScreen = ({ navigation, route }) => {
-  const [showProfile, setShowProfile] = useState(false);
-  const [hasUnreadNotifications, setHasUnreadNotifications] = useState(true);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [showCreditScoreModal, setShowCreditScoreModal] = useState(false);
-  const [showLoanStatusModal, setShowLoanStatusModal] = useState(false);
-  const [showHowToLoanModal, setShowHowToLoanModal] = useState(false);
-  const [currentDateTime, setCurrentDateTime] = useState('');
-  const [loanApplicationStatus, setLoanApplicationStatus] = useState(null);
-  const [activeTab, setActiveTab] = useState('pending');
-  const [walletBalance, setWalletBalance] = useState(12500.75);
-  const [showWalletActions, setShowWalletActions] = useState(false);
-  
-  // Wallet feature modals
-  const [showTransferModal, setShowTransferModal] = useState(false);
-  const [showPayQRModal, setShowPayQRModal] = useState(false);
-  const [showCashInModal, setShowCashInModal] = useState(false);
-  const [showTransactionHistory, setShowTransactionHistory] = useState(false);
-  
-  // Enhanced Transfer form states
-  const [transferAmount, setTransferAmount] = useState('');
-  const [recipientName, setRecipientName] = useState('');
-  const [recipientNumber, setRecipientNumber] = useState('');
-  const [recipientAccountNumber, setRecipientAccountNumber] = useState('');
-  const [transferNote, setTransferNote] = useState('');
-  const [selectedBank, setSelectedBank] = useState('');
-  const [transferFee, setTransferFee] = useState(0);
-  const [totalAmount, setTotalAmount] = useState(0);
-  const [transferStep, setTransferStep] = useState(1); // 1: Select Bank, 2: Fill Details, 3: Confirm
-  
-  // Cash In form states
-  const [cashInAmount, setCashInAmount] = useState('');
-  const [selectedCashInMethod, setSelectedCashInMethod] = useState('');
-  
-  // QR Payment states
-  const [qrAmount, setQrAmount] = useState('');
-  const [merchantName, setMerchantName] = useState('Sample Merchant');
-  
-  // Transaction history
-  const [walletTransactions, setWalletTransactions] = useState([
-    {
-      id: 1,
-      type: 'Transfer Out',
-      amount: -2500.00,
-      recipient: 'Juan Dela Cruz',
-      recipientNumber: '+63 912 345 6789',
-      bank: 'GCash',
-      date: new Date().toISOString(),
-      status: 'Completed',
-      note: 'Payment for services'
-    },
-    {
-      id: 2,
-      type: 'Cash In',
-      amount: 5000.00,
-      source: 'GCash',
-      date: new Date(Date.now() - 86400000).toISOString(),
-      status: 'Completed'
-    },
-    {
-      id: 3,
-      type: 'QR Payment',
-      amount: -850.00,
-      merchant: 'Coffee Shop',
-      date: new Date(Date.now() - 172800000).toISOString(),
-      status: 'Completed'
-    },
-    {
-      id: 4,
-      type: 'Loan Disbursement',
-      amount: 10000.00,
-      date: new Date(Date.now() - 259200000).toISOString(),
-      status: 'Completed'
-    }
-  ]);
+// ─── Dark-mode context ────────────────────────────────────────────────────────
+export const ThemeContext = createContext({ dark: false, toggle: () => {} });
 
-  // Enhanced Banks and e-wallets for transfer with fees and processing times
-  const banks = [
-    { 
-      id: 'gcash', 
-      name: 'GCash', 
-      icon: '💳', 
-      type: 'e-wallet',
-      fee: 0,
-      processing: 'Instant',
-      color: '#008C5A',
-      description: 'Send to GCash mobile number',
-      placeholder: '0912 345 6789',
-      inputType: 'mobile'
-    },
-    { 
-      id: 'maya', 
-      name: 'Maya', 
-      icon: '💳', 
-      type: 'e-wallet',
-      fee: 0,
-      processing: 'Instant',
-      color: '#0056A8',
-      description: 'Send to Maya mobile number',
-      placeholder: '0912 345 6789',
-      inputType: 'mobile'
-    },
-    { 
-      id: 'bpi', 
-      name: 'BPI', 
-      icon: '🏦', 
-      type: 'bank',
-      fee: 25,
-      processing: '1-2 hours',
-      color: '#C40B2C',
-      description: 'Send to BPI account',
-      placeholder: '1234 5678 9012',
-      inputType: 'account'
-    },
-    { 
-      id: 'bdo', 
-      name: 'BDO', 
-      icon: '🏦', 
-      type: 'bank',
-      fee: 25,
-      processing: '1-2 hours',
-      color: '#9E0B0F',
-      description: 'Send to BDO account',
-      placeholder: '1234 5678 9012',
-      inputType: 'account'
-    },
-    { 
-      id: 'metrobank', 
-      name: 'Metrobank', 
-      icon: '🏦', 
-      type: 'bank',
-      fee: 25,
-      processing: '1-2 hours',
-      color: '#0F4B9C',
-      description: 'Send to Metrobank account',
-      placeholder: '1234 5678 9012',
-      inputType: 'account'
-    },
-    { 
-      id: 'unionbank', 
-      name: 'UnionBank', 
-      icon: '🏦', 
-      type: 'bank',
-      fee: 15,
-      processing: 'Instant',
-      color: '#FF6B00',
-      description: 'Send to UnionBank account',
-      placeholder: '1234 5678 9012',
-      inputType: 'account'
-    },
-    { 
-      id: 'landbank', 
-      name: 'LandBank', 
-      icon: '🏦', 
-      type: 'bank',
-      fee: 20,
-      processing: '1-2 hours',
-      color: '#0055A5',
-      description: 'Send to LandBank account',
-      placeholder: '1234 5678 9012',
-      inputType: 'account'
-    },
-    { 
-      id: 'securitybank', 
-      name: 'Security Bank', 
-      icon: '🏦', 
-      type: 'bank',
-      fee: 25,
-      processing: '1-2 hours',
-      color: '#FFCD00',
-      description: 'Send to Security Bank account',
-      placeholder: '1234 5678 9012',
-      inputType: 'account'
-    }
-  ];
+// ─── Wallet banks / methods ───────────────────────────────────────────────────
+const BANKS = [
+  { id: 'gcash',        name: 'GCash',         icon: '💳', fee: 0,  proc: 'Instant', color: '#008C5A', inputType: 'mobile',  ph: '0912 345 6789' },
+  { id: 'maya',         name: 'Maya',          icon: '💳', fee: 0,  proc: 'Instant', color: '#0056A8', inputType: 'mobile',  ph: '0912 345 6789' },
+  { id: 'bpi',          name: 'BPI',           icon: '🏦', fee: 25, proc: '1-2 hrs', color: '#C40B2C', inputType: 'account', ph: '1234 5678 9012' },
+  { id: 'bdo',          name: 'BDO',           icon: '🏦', fee: 25, proc: '1-2 hrs', color: '#9E0B0F', inputType: 'account', ph: '1234 5678 9012' },
+  { id: 'metrobank',    name: 'Metrobank',     icon: '🏦', fee: 25, proc: '1-2 hrs', color: '#0F4B9C', inputType: 'account', ph: '1234 5678 9012' },
+  { id: 'unionbank',    name: 'UnionBank',     icon: '🏦', fee: 15, proc: 'Instant', color: '#FF6B00', inputType: 'account', ph: '1234 5678 9012' },
+  { id: 'landbank',     name: 'LandBank',      icon: '🏦', fee: 20, proc: '1-2 hrs', color: '#0055A5', inputType: 'account', ph: '1234 5678 9012' },
+  { id: 'securitybank', name: 'Security Bank', icon: '🏦', fee: 25, proc: '1-2 hrs', color: '#FFCD00', inputType: 'account', ph: '1234 5678 9012' },
+];
 
-  const [notifications, setNotifications] = useState([
-    { 
-      id: 1, 
-      title: 'Payment Received', 
-      message: 'Your payment of Php 5,250.00 has been processed', 
-      time: '2 hours ago', 
-      read: false 
-    },
-    { 
-      id: 2, 
-      title: 'Loan Approved', 
-      message: 'Your loan application has been approved', 
-      time: '1 day ago', 
-      read: true 
-    },
-  ]);
-
-  // Credit score data
-  const creditScore = 720;
-  const creditScoreStatus = "GOOD";
-  const maxLoanAmount = "Php 500,000.00";
-  const creditScoreMessage = "Your credit score is in good standing. You're eligible for our best loan rates and terms.";
-
-  // Cash In methods - Only Maya and GCash
-  const cashInMethods = [
-    { 
-      id: 'gcash', 
-      name: 'GCash', 
-      icon: '💳', 
-      fee: 0,
-      description: 'Instant transfer from your GCash wallet',
-      color: '#008C5A'
-    },
-    { 
-      id: 'maya', 
-      name: 'Maya', 
-      icon: '💳', 
-      fee: 0,
-      description: 'Instant transfer from your Maya account',
-      color: '#0056A8'
-    }
-  ];
-
-  // Calculate transfer fee and total amount
-  useEffect(() => {
-    if (selectedBank && transferAmount) {
-      const bank = banks.find(b => b.id === selectedBank);
-      const amount = parseFloat(transferAmount) || 0;
-      const fee = bank ? bank.fee : 0;
-      setTransferFee(fee);
-      setTotalAmount(amount + fee);
-    } else {
-      setTransferFee(0);
-      setTotalAmount(0);
-    }
-  }, [selectedBank, transferAmount]);
-
-  // Enhanced Transfer Function
-  const handleTransfer = () => {
-    const amount = parseFloat(transferAmount);
-    if (!amount || amount <= 0) {
-      Alert.alert('Error', 'Please enter a valid amount');
-      return;
-    }
-    if (totalAmount > walletBalance) {
-      Alert.alert('Error', 'Insufficient balance');
-      return;
-    }
-    if (!recipientName.trim()) {
-      Alert.alert('Error', 'Please enter recipient name');
-      return;
-    }
-    if (!recipientNumber.trim() && !recipientAccountNumber.trim()) {
-      Alert.alert('Error', 'Please enter recipient number or account');
-      return;
-    }
-    if (!selectedBank) {
-      Alert.alert('Error', 'Please select a bank or e-wallet');
-      return;
-    }
-
-    // Process transfer
-    setWalletBalance(prev => prev - totalAmount);
-    
-    // Get selected bank details
-    const bank = banks.find(b => b.id === selectedBank);
-    
-    // Add to transaction history
-    const newTransaction = {
-      id: Date.now(),
-      type: 'Transfer Out',
-      amount: -amount,
-      recipient: recipientName,
-      recipientNumber: bank?.inputType === 'mobile' ? recipientNumber : recipientAccountNumber,
-      bank: bank?.name,
-      date: new Date().toISOString(),
-      status: 'Completed',
-      note: transferNote || 'Money transfer',
-      fee: transferFee
-    };
-    setWalletTransactions(prev => [newTransaction, ...prev]);
-    
-    // Add notification
-    const notification = {
-      id: Date.now(),
-      title: 'Transfer Successful',
-      message: `Php ${amount.toFixed(2)} sent to ${recipientName} via ${bank?.name}`,
-      time: 'Just now',
-      read: false
-    };
-    setNotifications(prev => [notification, ...prev]);
-    setHasUnreadNotifications(true);
-    
-    // Reset form and close modal
-    resetTransferForm();
-    setShowTransferModal(false);
-    
-    Alert.alert('Success', `Php ${amount.toFixed(2)} transferred successfully to ${recipientName} via ${bank?.name}!`);
-  };
-
-  const resetTransferForm = () => {
-    setTransferAmount('');
-    setRecipientName('');
-    setRecipientNumber('');
-    setRecipientAccountNumber('');
-    setTransferNote('');
-    setSelectedBank('');
-    setTransferFee(0);
-    setTotalAmount(0);
-    setTransferStep(1);
-  };
-
-  const handleNextStep = () => {
-    if (transferStep === 1 && !selectedBank) {
-      Alert.alert('Error', 'Please select a bank or e-wallet');
-      return;
-    }
-    if (transferStep === 2) {
-      const amount = parseFloat(transferAmount);
-      if (!amount || amount <= 0) {
-        Alert.alert('Error', 'Please enter a valid amount');
-        return;
-      }
-      if (!recipientName.trim()) {
-        Alert.alert('Error', 'Please enter recipient name');
-        return;
-      }
-      const bank = banks.find(b => b.id === selectedBank);
-      if (bank?.inputType === 'mobile' && !recipientNumber.trim()) {
-        Alert.alert('Error', 'Please enter recipient mobile number');
-        return;
-      }
-      if (bank?.inputType === 'account' && !recipientAccountNumber.trim()) {
-        Alert.alert('Error', 'Please enter recipient account number');
-        return;
-      }
-    }
-    setTransferStep(transferStep + 1);
-  };
-
-  const handlePreviousStep = () => {
-    setTransferStep(transferStep - 1);
-  };
-
-  const handleCashIn = () => {
-    const amount = parseFloat(cashInAmount);
-    if (!amount || amount <= 0) {
-      Alert.alert('Error', 'Please enter a valid amount');
-      return;
-    }
-    if (!selectedCashInMethod) {
-      Alert.alert('Error', 'Please select a cash-in method');
-      return;
-    }
-
-    const method = cashInMethods.find(m => m.id === selectedCashInMethod);
-    const totalAmount = amount - method.fee;
-    
-    // Process cash in
-    setWalletBalance(prev => prev + totalAmount);
-    
-    // Add to transaction history
-    const newTransaction = {
-      id: Date.now(),
-      type: 'Cash In',
-      amount: totalAmount,
-      source: method.name,
-      date: new Date().toISOString(),
-      status: 'Completed',
-      fee: method.fee
-    };
-    setWalletTransactions(prev => [newTransaction, ...prev]);
-    
-    // Add notification
-    const notification = {
-      id: Date.now(),
-      title: 'Cash In Successful',
-      message: `Php ${totalAmount.toFixed(2)} added to your wallet via ${method.name}`,
-      time: 'Just now',
-      read: false
-    };
-    setNotifications(prev => [notification, ...prev]);
-    setHasUnreadNotifications(true);
-    
-    // Reset form and close modal
-    setCashInAmount('');
-    setSelectedCashInMethod('');
-    setShowCashInModal(false);
-    
-    Alert.alert('Success', `Php ${totalAmount.toFixed(2)} added to your wallet!`);
-  };
-
-  const handleQRPayment = () => {
-    const amount = parseFloat(qrAmount);
-    if (!amount || amount <= 0) {
-      Alert.alert('Error', 'Please enter a valid amount');
-      return;
-    }
-    if (amount > walletBalance) {
-      Alert.alert('Error', 'Insufficient balance');
-      return;
-    }
-
-    // Process QR payment
-    setWalletBalance(prev => prev - amount);
-    
-    // Add to transaction history
-    const newTransaction = {
-      id: Date.now(),
-      type: 'QR Payment',
-      amount: -amount,
-      merchant: merchantName,
-      date: new Date().toISOString(),
-      status: 'Completed'
-    };
-    setWalletTransactions(prev => [newTransaction, ...prev]);
-    
-    // Add notification
-    const notification = {
-      id: Date.now(),
-      title: 'QR Payment Successful',
-      message: `Php ${amount.toFixed(2)} paid to ${merchantName}`,
-      time: 'Just now',
-      read: false
-    };
-    setNotifications(prev => [notification, ...prev]);
-    setHasUnreadNotifications(true);
-    
-    // Reset form and close modal
-    setQrAmount('');
-    setShowPayQRModal(false);
-    
-    Alert.alert('Success', `Payment of Php ${amount.toFixed(2)} successful!`);
-  };
-
-  // Check for loan status when screen focuses
-  useEffect(() => {
-    if (route.params?.loanStatus) {
-      const status = route.params.loanStatus;
-      setLoanApplicationStatus(status);
-      setShowLoanStatusModal(true);
-      
-      // If loan is approved, add the amount to wallet
-      if (status.status === 'approved') {
-        const amountValue = parseFloat(status.amount.replace(/[^0-9.]/g, ''));
-        if (!isNaN(amountValue)) {
-          setWalletBalance(prev => prev + amountValue);
-          
-          // Add to transaction history
-          const newTransaction = {
-            id: Date.now(),
-            type: 'Loan Disbursement',
-            amount: amountValue,
-            date: new Date().toISOString(),
-            status: 'Completed'
-          };
-          setWalletTransactions(prev => [newTransaction, ...prev]);
-        }
-      }
-      
-      // Add notification
-      const newNotification = {
-        id: Date.now(),
-        title: status.status === 'approved' ? 'Loan Approved' : 'Loan Application Submitted',
-        message: status.status === 'approved' 
-          ? `Your loan of ${status.amount} has been approved and credited to your wallet` 
-          : `Your application for ${status.amount} is being processed`,
-        time: 'Just now',
-        read: false
-      };
-      setNotifications(prev => [newNotification, ...prev]);
-      setHasUnreadNotifications(true);
-      
-      navigation.setParams({ loanStatus: undefined });
-    }
-  }, [route.params]);
-
-  // Update current date time every second
-  useEffect(() => {
-    const updateDateTime = () => {
-      const now = new Date();
-      const options = { 
-        weekday: 'short', 
-        month: 'short', 
-        day: 'numeric', 
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true 
-      };
-      setCurrentDateTime(now.toLocaleString('en-US', options).toUpperCase());
-    };
-
-    updateDateTime();
-    const interval = setInterval(updateDateTime, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const handleLogout = () => {
-    navigation.navigate('Welcome');
-  };
-
-  const handleNotificationPress = (id) => {
-    const updatedNotifications = notifications.map(notification => 
-      notification.id === id ? {...notification, read: true} : notification
-    );
-    setNotifications(updatedNotifications);
-    setHasUnreadNotifications(updatedNotifications.some(n => !n.read));
-  };
-
-  const markAllAsRead = () => {
-    setNotifications(notifications.map(n => ({...n, read: true})));
-    setHasUnreadNotifications(false);
-  };
-
-  const formatTransactionDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  // Simple Profile Screen Component
-  const ProfileScreen = ({ onBack, onLogout }) => {
-    const [profileData, setProfileData] = useState({
-      name: 'Juan Dela Cruz',
-      email: 'juan.delacruz@example.com',
-      memberSince: 'January 15, 2023',
-      accountStatus: 'Active',
-      phoneNumber: '+63 912 345 6789',
-      address: '123 Main Street, Manila, Philippines',
-      profileImage: null
-    });
-
-    return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onBack}>
-            <Text style={styles.backButton}>←</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Profile</Text>
-          <View style={{ width: 24 }}></View>
-        </View>
-
-        <ScrollView contentContainerStyle={styles.profileContent}>
-          <View style={styles.avatarContainer}>
-            {profileData.profileImage ? (
-              <Image
-                source={{ uri: profileData.profileImage }}
-                style={styles.avatar}
-              />
-            ) : (
-              <View style={[styles.avatar, styles.emptyAvatar]}>
-                <MaterialIcons name="person" size={40} color="#9CA3AF" />
-              </View>
-            )}
-            <Text style={styles.name}>
-              {profileData.name || 'No name provided'}
-            </Text>
-            <Text style={styles.email}>
-              {profileData.email || 'No email provided'}
-            </Text>
-          </View>
-
-          <View style={styles.detailsContainer}>
-            <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Member Since</Text>
-              <Text style={styles.detailValue}>
-                {profileData.memberSince || 'Not available'}
-              </Text>
-            </View>
-            
-            <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Account Status</Text>
-              <Text style={[styles.detailValue, styles.activeStatus]}>
-                {profileData.accountStatus || 'Unknown'}
-              </Text>
-            </View>
-            
-            <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Phone Number</Text>
-              <Text style={styles.detailValue}>
-                {profileData.phoneNumber || 'Not provided'}
-              </Text>
-            </View>
-            
-            <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Address</Text>
-              <Text style={styles.detailValue}>
-                {profileData.address || 'Not provided'}
-              </Text>
-            </View>
-          </View>
-
-          <TouchableOpacity 
-            style={styles.settingsButton}
-            onPress={() => {}}
-          >
-            <Text style={styles.settingsButtonText}>Account Settings</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
-            <Text style={styles.logoutButtonText}>Log Out</Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </SafeAreaView>
-    );
-  };
-
-  if (showProfile) {
-    return (
-      <ProfileScreen 
-        onBack={() => setShowProfile(false)} 
-        onLogout={handleLogout} 
-      />
-    );
-  }
+// ─── Transaction row ──────────────────────────────────────────────────────────
+const TxRow = ({ tx, C }) => {
+  const isOut = ['Transfer Out', 'QR Payment'].includes(tx.type);
+  const emoji = {
+    'Transfer Out':      '📤',
+    'Cash In':           '📥',
+    'QR Payment':        '📲',
+    'Loan Disbursement': '🏦',
+    'Payment':           '💸',
+  }[tx.type] || '💳';
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Image 
-            source={require('../assets/LoraLogo.png')} 
-            style={styles.logo}
-          />
-          <Text style={styles.appName}>Lora</Text>
-        </View>
-        <TouchableOpacity 
-          style={styles.notificationButton}
-          onPress={() => setShowNotifications(true)}
-        >
-          <MaterialIcons name="notifications" size={24} color="#374151" />
-          {hasUnreadNotifications && (
-            <View style={styles.notificationDot} />
-          )}
-        </TouchableOpacity>
+    <View style={[styles.txRow, { borderBottomColor: C.border }]}>
+      <View style={[styles.txIcon, { backgroundColor: isOut ? '#FEF2F2' : '#F0FDF4' }]}>
+        <Text style={{ fontSize: 18 }}>{emoji}</Text>
       </View>
-
-      {/* Enhanced Transfer Modal */}
-      <Modal
-        visible={showTransferModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => {
-          resetTransferForm();
-          setShowTransferModal(false);
-        }}
-      >
-        <View style={styles.centeredView}>
-          <View style={styles.walletModal}>
-            <TouchableOpacity 
-              style={styles.closeButton}
-              onPress={() => {
-                resetTransferForm();
-                setShowTransferModal(false);
-              }}
-            >
-              <MaterialIcons name="close" size={24} color="#6B7280" />
-            </TouchableOpacity>
-            
-            <Text style={styles.walletModalTitle}>
-              {transferStep === 1 && 'Select Bank'}
-              {transferStep === 2 && 'Transfer Details'}
-              {transferStep === 3 && 'Confirm Transfer'}
-            </Text>
-            
-            {/* Progress Steps */}
-            <View style={styles.progressSteps}>
-              <View style={[styles.step, transferStep >= 1 && styles.activeStep]}>
-                <Text style={[styles.stepText, transferStep >= 1 && styles.activeStepText]}>1</Text>
-                <Text style={[styles.stepLabel, transferStep >= 1 && styles.activeStepLabel]}>Bank</Text>
-              </View>
-              <View style={[styles.stepLine, transferStep >= 2 && styles.activeStepLine]} />
-              <View style={[styles.step, transferStep >= 2 && styles.activeStep]}>
-                <Text style={[styles.stepText, transferStep >= 2 && styles.activeStepText]}>2</Text>
-                <Text style={[styles.stepLabel, transferStep >= 2 && styles.activeStepLabel]}>Details</Text>
-              </View>
-              <View style={[styles.stepLine, transferStep >= 3 && styles.activeStepLine]} />
-              <View style={[styles.step, transferStep >= 3 && styles.activeStep]}>
-                <Text style={[styles.stepText, transferStep >= 3 && styles.activeStepText]}>3</Text>
-                <Text style={[styles.stepLabel, transferStep >= 3 && styles.activeStepLabel]}>Confirm</Text>
-              </View>
-            </View>
-
-            {/* Step 1: Select Bank */}
-            {transferStep === 1 && (
-              <>
-                <Text style={styles.walletBalance}>Available: Php {walletBalance.toFixed(2)}</Text>
-                
-                <View style={styles.inputContainer}>
-                  <Text style={styles.inputLabel}>Select Bank or E-Wallet</Text>
-                  <ScrollView style={styles.bankList} showsVerticalScrollIndicator={false}>
-                    <View style={styles.bankGrid}>
-                      {banks.map(bank => (
-                        <TouchableOpacity
-                          key={bank.id}
-                          style={[
-                            styles.bankOptionCard,
-                            selectedBank === bank.id && styles.selectedBankOptionCard,
-                            { borderLeftColor: bank.color }
-                          ]}
-                          onPress={() => setSelectedBank(bank.id)}
-                        >
-                          <View style={styles.bankOptionHeader}>
-                            <View style={styles.bankOptionInfo}>
-                              <Text style={styles.bankIcon}>{bank.icon}</Text>
-                              <View style={styles.bankDetails}>
-                                <Text style={styles.bankName}>{bank.name}</Text>
-                                <Text style={styles.bankDescription}>{bank.description}</Text>
-                              </View>
-                            </View>
-                            {selectedBank === bank.id && (
-                              <MaterialIcons name="check-circle" size={24} color={bank.color} />
-                            )}
-                          </View>
-                          <View style={styles.bankOptionFooter}>
-                            <Text style={styles.bankFee}>
-                              Fee: <Text style={bank.fee === 0 ? styles.freeText : styles.feeText}>
-                                Php {bank.fee.toFixed(2)}
-                              </Text>
-                            </Text>
-                            <Text style={styles.bankProcessing}>• {bank.processing}</Text>
-                          </View>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </ScrollView>
-                </View>
-                
-                <TouchableOpacity 
-                  style={[
-                    styles.walletActionButtonPrimary,
-                    !selectedBank && styles.disabledButton
-                  ]}
-                  onPress={handleNextStep}
-                  disabled={!selectedBank}
-                >
-                  <Text style={styles.walletActionButtonPrimaryText}>Continue</Text>
-                </TouchableOpacity>
-              </>
-            )}
-
-            {/* Step 2: Fill Details */}
-            {transferStep === 2 && (
-              <>
-                <View style={styles.selectedBankPreview}>
-                  <Text style={styles.selectedBankText}>
-                    Sending via: {banks.find(b => b.id === selectedBank)?.name}
-                  </Text>
-                </View>
-
-                <ScrollView style={styles.transferForm} showsVerticalScrollIndicator={false}>
-                  <View style={styles.inputContainer}>
-                    <Text style={styles.inputLabel}>Recipient Full Name</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="Juan Dela Cruz"
-                      value={recipientName}
-                      onChangeText={setRecipientName}
-                    />
-                  </View>
-
-                  {selectedBank && (
-                    <View style={styles.inputContainer}>
-                      <Text style={styles.inputLabel}>
-                        {banks.find(b => b.id === selectedBank)?.inputType === 'mobile' 
-                          ? 'Recipient Mobile Number' 
-                          : 'Recipient Account Number'}
-                      </Text>
-                      <TextInput
-                        style={styles.textInput}
-                        placeholder={banks.find(b => b.id === selectedBank)?.placeholder}
-                        value={
-                          banks.find(b => b.id === selectedBank)?.inputType === 'mobile' 
-                            ? recipientNumber 
-                            : recipientAccountNumber
-                        }
-                        onChangeText={
-                          banks.find(b => b.id === selectedBank)?.inputType === 'mobile' 
-                            ? setRecipientNumber 
-                            : setRecipientAccountNumber
-                        }
-                        keyboardType={
-                          banks.find(b => b.id === selectedBank)?.inputType === 'mobile' 
-                            ? "phone-pad" 
-                            : "numeric"
-                        }
-                      />
-                    </View>
-                  )}
-
-                  <View style={styles.inputContainer}>
-                    <Text style={styles.inputLabel}>Amount</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="0.00"
-                      value={transferAmount}
-                      onChangeText={setTransferAmount}
-                      keyboardType="numeric"
-                    />
-                  </View>
-
-                  <View style={styles.inputContainer}>
-                    <Text style={styles.inputLabel}>Note (Optional)</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="Payment for..."
-                      value={transferNote}
-                      onChangeText={setTransferNote}
-                    />
-                  </View>
-
-                  {/* Amount Summary */}
-                  {transferAmount && (
-                    <View style={styles.amountSummary}>
-                      <View style={styles.amountRow}>
-                        <Text style={styles.amountLabel}>Transfer Amount:</Text>
-                        <Text style={styles.amountValue}>Php {parseFloat(transferAmount || 0).toFixed(2)}</Text>
-                      </View>
-                      <View style={styles.amountRow}>
-                        <Text style={styles.amountLabel}>Processing Fee:</Text>
-                        <Text style={styles.amountValue}>Php {transferFee.toFixed(2)}</Text>
-                      </View>
-                      <View style={[styles.amountRow, styles.totalAmountRow]}>
-                        <Text style={styles.totalAmountLabel}>Total Amount:</Text>
-                        <Text style={styles.totalAmountValue}>Php {totalAmount.toFixed(2)}</Text>
-                      </View>
-                    </View>
-                  )}
-                </ScrollView>
-
-                <View style={styles.formActions}>
-                  <TouchableOpacity 
-                    style={styles.secondaryButton}
-                    onPress={handlePreviousStep}
-                  >
-                    <Text style={styles.secondaryButtonText}>Back</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={[
-                      styles.walletActionButtonPrimary,
-                      (!transferAmount || !recipientName) && styles.disabledButton
-                    ]}
-                    onPress={handleNextStep}
-                    disabled={!transferAmount || !recipientName}
-                  >
-                    <Text style={styles.walletActionButtonPrimaryText}>Continue</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-
-            {/* Step 3: Confirm Transfer */}
-            {transferStep === 3 && (
-              <>
-                <ScrollView style={styles.confirmationView} showsVerticalScrollIndicator={false}>
-                  <View style={styles.confirmationCard}>
-                    <Text style={styles.confirmationTitle}>Transfer Summary</Text>
-                    
-                    <View style={styles.confirmationRow}>
-                      <Text style={styles.confirmationLabel}>Recipient Name:</Text>
-                      <Text style={styles.confirmationValue}>{recipientName}</Text>
-                    </View>
-                    
-                    <View style={styles.confirmationRow}>
-                      <Text style={styles.confirmationLabel}>
-                        {banks.find(b => b.id === selectedBank)?.inputType === 'mobile' 
-                          ? 'Mobile Number:' 
-                          : 'Account Number:'}
-                      </Text>
-                      <Text style={styles.confirmationValue}>
-                        {banks.find(b => b.id === selectedBank)?.inputType === 'mobile' 
-                          ? recipientNumber 
-                          : recipientAccountNumber}
-                      </Text>
-                    </View>
-                    
-                    <View style={styles.confirmationRow}>
-                      <Text style={styles.confirmationLabel}>Bank/E-Wallet:</Text>
-                      <Text style={styles.confirmationValue}>{banks.find(b => b.id === selectedBank)?.name}</Text>
-                    </View>
-                    
-                    <View style={styles.confirmationRow}>
-                      <Text style={styles.confirmationLabel}>Amount:</Text>
-                      <Text style={styles.confirmationValue}>Php {parseFloat(transferAmount || 0).toFixed(2)}</Text>
-                    </View>
-                    
-                    <View style={styles.confirmationRow}>
-                      <Text style={styles.confirmationLabel}>Processing Fee:</Text>
-                      <Text style={styles.confirmationValue}>Php {transferFee.toFixed(2)}</Text>
-                    </View>
-                    
-                    <View style={[styles.confirmationRow, styles.confirmationTotal]}>
-                      <Text style={styles.confirmationTotalLabel}>Total Deducted:</Text>
-                      <Text style={styles.confirmationTotalValue}>Php {totalAmount.toFixed(2)}</Text>
-                    </View>
-                    
-                    {transferNote && (
-                      <View style={styles.confirmationRow}>
-                        <Text style={styles.confirmationLabel}>Note:</Text>
-                        <Text style={styles.confirmationValue}>{transferNote}</Text>
-                      </View>
-                    )}
-                  </View>
-                  
-                  <View style={styles.warningBox}>
-                    <MaterialIcons name="warning" size={20} color="#F59E0B" />
-                    <Text style={styles.warningText}>
-                      Please review all details carefully. Transactions cannot be reversed once processed.
-                    </Text>
-                  </View>
-                </ScrollView>
-
-                <View style={styles.formActions}>
-                  <TouchableOpacity 
-                    style={styles.secondaryButton}
-                    onPress={handlePreviousStep}
-                  >
-                    <Text style={styles.secondaryButtonText}>Back</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={styles.walletActionButtonPrimary}
-                    onPress={handleTransfer}
-                  >
-                    <Text style={styles.walletActionButtonPrimaryText}>Confirm Transfer</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-          </View>
-        </View>
-      </Modal>
-
-      {/* Cash In Modal */}
-      <Modal
-        visible={showCashInModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowCashInModal(false)}
-      >
-        <View style={styles.centeredView}>
-          <View style={styles.walletModal}>
-            <TouchableOpacity 
-              style={styles.closeButton}
-              onPress={() => setShowCashInModal(false)}
-            >
-              <MaterialIcons name="close" size={24} color="#6B7280" />
-            </TouchableOpacity>
-            
-            <Text style={styles.walletModalTitle}>Cash In</Text>
-            <Text style={styles.walletBalance}>Available: Php {walletBalance.toFixed(2)}</Text>
-            
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Amount to Cash In</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="0.00"
-                value={cashInAmount}
-                onChangeText={setCashInAmount}
-                keyboardType="numeric"
-              />
-            </View>
-            
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Select E-Wallet</Text>
-              <View style={styles.cashInMethodsContainer}>
-                {cashInMethods.map(method => (
-                  <TouchableOpacity
-                    key={method.id}
-                    style={[
-                      styles.cashInMethodCard,
-                      selectedCashInMethod === method.id && styles.selectedCashInMethodCard,
-                      { borderLeftColor: method.color }
-                    ]}
-                    onPress={() => setSelectedCashInMethod(method.id)}
-                  >
-                    <View style={styles.cashInMethodHeader}>
-                      <View style={styles.cashInMethodInfo}>
-                        <Text style={styles.cashInMethodIcon}>{method.icon}</Text>
-                        <View style={styles.cashInMethodDetails}>
-                          <Text style={styles.cashInMethodName}>{method.name}</Text>
-                          <Text style={styles.cashInMethodDescription}>{method.description}</Text>
-                        </View>
-                      </View>
-                      {selectedCashInMethod === method.id && (
-                        <MaterialIcons name="check-circle" size={24} color={method.color} />
-                      )}
-                    </View>
-                    <View style={styles.cashInMethodFooter}>
-                      <Text style={styles.cashInMethodFee}>
-                        Processing Fee: <Text style={styles.freeText}>FREE</Text>
-                      </Text>
-                      <Text style={styles.cashInMethodTime}>• Instant Transfer</Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-            
-            <TouchableOpacity 
-              style={[
-                styles.walletActionButtonPrimary,
-                !selectedCashInMethod && styles.disabledButton
-              ]}
-              onPress={handleCashIn}
-              disabled={!selectedCashInMethod}
-            >
-              <Text style={styles.walletActionButtonPrimaryText}>
-                Cash In via {selectedCashInMethod ? cashInMethods.find(m => m.id === selectedCashInMethod)?.name : 'E-Wallet'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Pay QR Modal */}
-      <Modal
-        visible={showPayQRModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowPayQRModal(false)}
-      >
-        <View style={styles.centeredView}>
-          <View style={styles.walletModal}>
-            <TouchableOpacity 
-              style={styles.closeButton}
-              onPress={() => setShowPayQRModal(false)}
-            >
-              <MaterialIcons name="close" size={24} color="#6B7280" />
-            </TouchableOpacity>
-            
-            <Text style={styles.walletModalTitle}>QR Payment</Text>
-            <Text style={styles.walletBalance}>Available: Php {walletBalance.toFixed(2)}</Text>
-            
-            {/* Mock QR Code */}
-            <View style={styles.qrCodeContainer}>
-              <View style={styles.qrCode}>
-                <MaterialIcons name="qr-code-2" size={100} color="#8B5CF6" />
-              </View>
-              <Text style={styles.merchantName}>{merchantName}</Text>
-            </View>
-            
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Amount to Pay</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="0.00"
-                value={qrAmount}
-                onChangeText={setQrAmount}
-                keyboardType="numeric"
-              />
-            </View>
-            
-            <TouchableOpacity 
-              style={styles.walletActionButtonPrimary}
-              onPress={handleQRPayment}
-            >
-              <Text style={styles.walletActionButtonPrimaryText}>Pay Now</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Transaction History Modal */}
-      <Modal
-        visible={showTransactionHistory}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={() => setShowTransactionHistory(false)}
-      >
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Transaction History</Text>
-            <TouchableOpacity onPress={() => setShowTransactionHistory(false)}>
-              <MaterialIcons name="close" size={24} color="#374151" />
-            </TouchableOpacity>
-          </View>
-          
-          <ScrollView style={styles.transactionHistoryList}>
-            {walletTransactions.map(transaction => (
-              <View key={transaction.id} style={styles.transactionHistoryItem}>
-                <View style={styles.transactionHistoryIcon}>
-                  <MaterialIcons 
-                    name={
-                      transaction.type === 'Transfer Out' ? 'send' :
-                      transaction.type === 'Cash In' ? 'add-circle' :
-                      transaction.type === 'QR Payment' ? 'qr-code' :
-                      'account-balance'
-                    } 
-                    size={24} 
-                    color={transaction.amount > 0 ? '#10B981' : '#EF4444'} 
-                  />
-                </View>
-                <View style={styles.transactionHistoryDetails}>
-                  <Text style={styles.transactionHistoryType}>{transaction.type}</Text>
-                  <Text style={styles.transactionHistoryDate}>
-                    {formatTransactionDate(transaction.date)}
-                  </Text>
-                  {transaction.recipient && (
-                    <Text style={styles.transactionHistoryExtra}>To: {transaction.recipient}</Text>
-                  )}
-                  {transaction.bank && (
-                    <Text style={styles.transactionHistoryExtra}>Via: {transaction.bank}</Text>
-                  )}
-                  {transaction.source && (
-                    <Text style={styles.transactionHistoryExtra}>From: {transaction.source}</Text>
-                  )}
-                  {transaction.merchant && (
-                    <Text style={styles.transactionHistoryExtra}>At: {transaction.merchant}</Text>
-                  )}
-                  {transaction.note && (
-                    <Text style={styles.transactionHistoryExtra}>{transaction.note}</Text>
-                  )}
-                  {transaction.fee > 0 && (
-                    <Text style={styles.transactionHistoryExtra}>Fee: Php {transaction.fee.toFixed(2)}</Text>
-                  )}
-                </View>
-                <View style={styles.transactionHistoryAmountContainer}>
-                  <Text style={[
-                    styles.transactionHistoryAmount,
-                    { color: transaction.amount > 0 ? '#10B981' : '#EF4444' }
-                  ]}>
-                    {transaction.amount > 0 ? '+' : ''}Php {Math.abs(transaction.amount).toFixed(2)}
-                  </Text>
-                  <Text style={styles.transactionHistoryStatus}>{transaction.status}</Text>
-                </View>
-              </View>
-            ))}
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
-
-      {/* Notifications Modal */}
-      <Modal
-        visible={showNotifications}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={() => setShowNotifications(false)}
-      >
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Notifications</Text>
-            <View style={styles.modalHeaderActions}>
-              <TouchableOpacity onPress={markAllAsRead}>
-                <Text style={styles.markAllText}>Mark all as read</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => setShowNotifications(false)}>
-                <MaterialIcons name="close" size={24} color="#374151" />
-              </TouchableOpacity>
-            </View>
-          </View>
-          
-          <ScrollView style={styles.notificationsList}>
-            {notifications.length > 0 ? (
-              notifications.map(notification => (
-                <TouchableOpacity 
-                  key={notification.id}
-                  style={[
-                    styles.notificationItem,
-                    !notification.read && styles.unreadNotification
-                  ]}
-                  onPress={() => handleNotificationPress(notification.id)}
-                >
-                  <View style={styles.notificationContent}>
-                    <Text style={styles.notificationTitle}>{notification.title}</Text>
-                    <Text style={styles.notificationMessage}>{notification.message}</Text>
-                    <Text style={styles.notificationTime}>{notification.time}</Text>
-                  </View>
-                  {!notification.read && <View style={styles.unreadDot} />}
-                </TouchableOpacity>
-              ))
-            ) : (
-              <View style={styles.emptyNotifications}>
-                <MaterialIcons name="notifications-off" size={40} color="#9CA3AF" />
-                <Text style={styles.emptyText}>No notifications yet</Text>
-              </View>
-            )}
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
-
-      {/* Enhanced Credit Score Modal */}
-      <Modal
-        visible={showCreditScoreModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowCreditScoreModal(false)}
-      >
-        <View style={styles.centeredView}>
-          <View style={styles.creditScoreModal}>
-            <TouchableOpacity 
-              style={styles.closeButton}
-              onPress={() => setShowCreditScoreModal(false)}
-            >
-              <MaterialIcons name="close" size={24} color="#6B7280" />
-            </TouchableOpacity>
-            
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <Text style={styles.creditScoreModalTitle}>Your Credit Profile</Text>
-              
-              {/* Enhanced Credit Score Meter */}
-              <View style={styles.enhancedMeterContainer}>
-                {/* Main Score Circle */}
-                <View style={styles.scoreCircleContainer}>
-                  <View style={styles.scoreCircleOuter}>
-                    <View style={[
-                      styles.scoreCircleProgress,
-                      { 
-                        transform: [{ rotate: `${-135 + (creditScore / 850) * 270}deg` }],
-                        borderTopColor: creditScore >= 700 ? '#10B981' : creditScore >= 600 ? '#F59E0B' : '#EF4444',
-                        borderRightColor: creditScore >= 700 ? '#10B981' : creditScore >= 600 ? '#F59E0B' : '#EF4444'
-                      }
-                    ]} />
-                    <View style={styles.scoreCircleInner}>
-                      <Text style={styles.scoreCircleNumber}>{creditScore}</Text>
-                      <Text style={[
-                        styles.scoreCircleStatus,
-                        { 
-                          color: creditScore >= 700 ? '#10B981' : creditScore >= 600 ? '#F59E0B' : '#EF4444'
-                        }
-                      ]}>
-                        {creditScore >= 700 ? 'EXCELLENT' : creditScore >= 600 ? 'GOOD' : 'FAIR'}
-                      </Text>
-                      <Text style={styles.scoreCircleLabel}>Credit Score</Text>
-                    </View>
-                  </View>
-                </View>
-
-                {/* Score Range Indicators */}
-                <View style={styles.scoreRanges}>
-                  <View style={styles.scoreRangeItem}>
-                    <View style={[styles.rangeDot, { backgroundColor: '#EF4444' }]} />
-                    <Text style={styles.rangeText}>300-579</Text>
-                    <Text style={styles.rangeLabel}>Poor</Text>
-                  </View>
-                  <View style={styles.scoreRangeItem}>
-                    <View style={[styles.rangeDot, { backgroundColor: '#F59E0B' }]} />
-                    <Text style={styles.rangeText}>580-669</Text>
-                    <Text style={styles.rangeLabel}>Fair</Text>
-                  </View>
-                  <View style={styles.scoreRangeItem}>
-                    <View style={[styles.rangeDot, { backgroundColor: '#10B981' }]} />
-                    <Text style={styles.rangeText}>670-850</Text>
-                    <Text style={styles.rangeLabel}>Excellent</Text>
-                  </View>
-                </View>
-
-                {/* Quick Stats */}
-                <View style={styles.quickStats}>
-                  <View style={styles.statItem}>
-                    <Text style={styles.statValue}>₱500K</Text>
-                    <Text style={styles.statLabel}>Max Loan</Text>
-                  </View>
-                  <View style={styles.statItem}>
-                    <Text style={styles.statValue}>8.5%</Text>
-                    <Text style={styles.statLabel}>Best Rate</Text>
-                  </View>
-                  <View style={styles.statItem}>
-                    <Text style={styles.statValue}>36</Text>
-                    <Text style={styles.statLabel}>Months Max</Text>
-                  </View>
-                </View>
-              </View>
-
-              {/* Credit Score Breakdown */}
-              <View style={styles.creditBreakdownSection}>
-                <Text style={styles.sectionTitle}>Credit Score Factors</Text>
-                
-                {[
-                  { title: 'Payment History', percentage: '35%', progress: 85, status: 'Excellent - No missed payments', color: '#10B981' },
-                  { title: 'Credit Utilization', percentage: '30%', progress: 70, status: 'Good - 25% utilization', color: '#F59E0B' },
-                  { title: 'Credit History Length', percentage: '15%', progress: 60, status: 'Fair - 3 years average', color: '#8B5CF6' },
-                  { title: 'Credit Mix', percentage: '10%', progress: 75, status: 'Good - Diverse credit types', color: '#10B981' },
-                  { title: 'New Credit', percentage: '10%', progress: 80, status: 'Excellent - No recent inquiries', color: '#10B981' }
-                ].map((factor, index) => (
-                  <View key={index} style={styles.creditFactor}>
-                    <View style={styles.creditFactorHeader}>
-                      <Text style={styles.creditFactorTitle}>{factor.title}</Text>
-                      <Text style={styles.creditFactorPercentage}>{factor.percentage}</Text>
-                    </View>
-                    <View style={styles.progressBarContainer}>
-                      <View style={[styles.progressFill, { 
-                        width: `${factor.progress}%`, 
-                        backgroundColor: factor.color 
-                      }]} />
-                    </View>
-                    <Text style={styles.creditFactorStatus}>{factor.status}</Text>
-                  </View>
-                ))}
-              </View>
-
-              {/* Your Benefits */}
-              <View style={styles.benefitsSection}>
-                <Text style={styles.sectionTitle}>Your Benefits</Text>
-                <View style={styles.benefitsGrid}>
-                  <View style={styles.benefitCard}>
-                    <MaterialIcons name="check-circle" size={20} color="#10B981" />
-                    <Text style={styles.benefitText}>Pre-approved for loans</Text>
-                  </View>
-                  <View style={styles.benefitCard}>
-                    <MaterialIcons name="check-circle" size={20} color="#10B981" />
-                    <Text style={styles.benefitText}>Low interest rates</Text>
-                  </View>
-                  <View style={styles.benefitCard}>
-                    <MaterialIcons name="check-circle" size={20} color="#10B981" />
-                    <Text style={styles.benefitText}>Flexible terms</Text>
-                  </View>
-                  <View style={styles.benefitCard}>
-                    <MaterialIcons name="check-circle" size={20} color="#10B981" />
-                    <Text style={styles.benefitText}>Priority support</Text>
-                  </View>
-                </View>
-              </View>
-
-              {/* Action Buttons */}
-              <View style={styles.actionButtonsContainer}>
-                <TouchableOpacity 
-                  style={styles.secondaryButton}
-                  onPress={() => {
-                    setShowCreditScoreModal(false);
-                    navigation.navigate('CreditReport');
-                  }}
-                >
-                  <Text style={styles.secondaryButtonText}>View Full Report</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={styles.applyLoanButton}
-                  onPress={() => {
-                    setShowCreditScoreModal(false);
-                    navigation.navigate('LoanApplication');
-                  }}
-                >
-                  <Text style={styles.applyLoanButtonText}>Apply for Loan</Text>
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Loan Application Status Modal */}
-      <Modal
-        visible={showLoanStatusModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowLoanStatusModal(false)}
-      >
-        <View style={styles.centeredView}>
-          <View style={styles.loanStatusModal}>
-            <View style={styles.loanStatusHeader}>
-              <MaterialIcons name="check-circle" size={40} color="#10B981" />
-                            <Text style={styles.loanStatusTitle}>Application Submitted</Text>
-            </View>
-            
-            <Text style={styles.loanStatusText}>
-              Your loan application is now being processed. We'll notify you once we have updates.
-            </Text>
-            
-            <Text style={styles.loanStatusSubtext}>
-              Application ID: {loanApplicationStatus?.id}
-            </Text>
-            
-            <View style={styles.loanStatusDetails}>
-              <View style={styles.loanStatusDetailItem}>
-                <Text style={styles.loanStatusDetailLabel}>Amount:</Text>
-                <Text style={styles.loanStatusDetailValue}>
-                  {loanApplicationStatus?.amount}
-                </Text>
-              </View>
-              <View style={styles.loanStatusDetailItem}>
-                <Text style={styles.loanStatusDetailLabel}>Term:</Text>
-                <Text style={styles.loanStatusDetailValue}>
-                  {loanApplicationStatus?.term} months
-                </Text>
-              </View>
-              <View style={styles.loanStatusDetailItem}>
-                <Text style={styles.loanStatusDetailLabel}>Lenders:</Text>
-                <Text style={styles.loanStatusDetailValue}>
-                  {loanApplicationStatus?.lenders}
-                </Text>
-              </View>
-            </View>
-            
-            <TouchableOpacity 
-              style={styles.loanStatusButton}
-              onPress={() => setShowLoanStatusModal(false)}
-            >
-              <Text style={styles.loanStatusButtonText}>Got it!</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Wallet Actions Modal */}
-      <Modal
-        visible={showWalletActions}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowWalletActions(false)}
-      >
-        <View style={styles.centeredView}>
-          <View style={styles.walletActionsModal}>
-            <TouchableOpacity 
-              style={styles.closeButton}
-              onPress={() => setShowWalletActions(false)}
-            >
-              <MaterialIcons name="close" size={24} color="#6B7280" />
-            </TouchableOpacity>
-            
-            <Text style={styles.walletActionsTitle}>Wallet Actions</Text>
-            
-            <View style={styles.walletActionButtons}>
-              <TouchableOpacity 
-                style={styles.walletActionButton}
-                onPress={() => {
-                  setShowWalletActions(false);
-                  setShowTransferModal(true);
-                }}
-              >
-                <MaterialIcons name="send" size={30} color="#8B5CF6" />
-                <Text style={styles.walletActionButtonText}>Transfer</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.walletActionButton}
-                onPress={() => {
-                  setShowWalletActions(false);
-                  setShowPayQRModal(true);
-                }}
-              >
-                <MaterialIcons name="qr-code" size={30} color="#8B5CF6" />
-                <Text style={styles.walletActionButtonText}>Pay QR</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.walletActionButton}
-                onPress={() => {
-                  setShowWalletActions(false);
-                  setShowCashInModal(true);
-                }}
-              >
-                <MaterialIcons name="add-circle" size={30} color="#8B5CF6" />
-                <Text style={styles.walletActionButtonText}>Cash In</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* How to Loan Modal */}
-      <Modal
-        visible={showHowToLoanModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowHowToLoanModal(false)}
-      >
-        <View style={styles.centeredView}>
-          <View style={styles.howToLoanModal}>
-            <TouchableOpacity 
-              style={styles.closeButton}
-              onPress={() => setShowHowToLoanModal(false)}
-            >
-              <MaterialIcons name="close" size={24} color="#6B7280" />
-            </TouchableOpacity>
-            
-            <Text style={styles.howToLoanModalTitle}>How to Loan with Lora</Text>
-            
-            <ScrollView style={styles.howToLoanContent}>
-              <View style={styles.featureSection}>
-                <Text style={styles.featureTitle}>1. Check Your Credit Score</Text>
-                <Text style={styles.featureDescription}>
-                  View your current credit score to understand your eligibility for loans. 
-                  A higher score gives you access to better rates and higher loan amounts.
-                </Text>
-              </View>
-              
-              <View style={styles.featureSection}>
-                <Text style={styles.featureTitle}>2. Apply for a Loan</Text>
-                <Text style={styles.featureDescription}>
-                  Fill out our simple application form with your personal and financial details. 
-                  Our process is quick and secure.
-                </Text>
-              </View>
-              
-              <View style={styles.featureSection}>
-                <Text style={styles.featureTitle}>3. Get Approved</Text>
-                <Text style={styles.featureDescription}>
-                  Receive instant approval decisions. If approved, funds will be disbursed 
-                  directly to your Lora wallet.
-                </Text>
-              </View>
-              
-              <View style={styles.featureSection}>
-                <Text style={styles.featureTitle}>4. Manage Your Loan</Text>
-                <Text style={styles.featureDescription}>
-                  View your current loan balance, payment schedule, and make payments 
-                  directly from your wallet.
-                </Text>
-              </View>
-              
-              <View style={styles.featureSection}>
-                <Text style={styles.featureTitle}>5. Make Payments</Text>
-                <Text style={styles.featureDescription}>
-                  Use your wallet balance to make payments on time. Set up reminders 
-                  to avoid missing due dates.
-                </Text>
-              </View>
-              
-              <View style={styles.featureSection}>
-                <Text style={styles.featureTitle}>6. Wallet Features</Text>
-                <Text style={styles.featureDescription}>
-                  Your Lora wallet allows you to transfer funds, pay via QR code, 
-                  and cash in from various payment channels.
-                </Text>
-              </View>
-            </ScrollView>
-            
-            <TouchableOpacity 
-              style={styles.applyLoanButton}
-              onPress={() => {
-                setShowHowToLoanModal(false);
-                navigation.navigate('LoanApplication');
-              }}
-            >
-              <Text style={styles.applyLoanButtonText}>Apply for Loan Now</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Main Content */}
-      <ScrollView contentContainerStyle={styles.content}>
-        {/* Tab Selector */}
-        <View style={styles.tabSelector}>
-          <TouchableOpacity 
-            style={[
-              styles.tabButton, 
-              activeTab === 'pending' && styles.activeTab
-            ]}
-            onPress={() => setActiveTab('pending')}
-          >
-            <Text style={[
-              styles.tabButtonText,
-              activeTab === 'pending' && styles.activeTabText
-            ]}>
-              Pending Amount
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[
-              styles.tabButton, 
-              activeTab === 'wallet' && styles.activeTab
-            ]}
-            onPress={() => setActiveTab('wallet')}
-          >
-            <Text style={[
-              styles.tabButtonText,
-              activeTab === 'wallet' && styles.activeTabText
-            ]}>
-              My Wallet
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Grand Total Card or Wallet Card based on active tab */}
-        {activeTab === 'pending' ? (
-          <View style={styles.grandTotalCard}>
-            <View style={styles.grandTotalContent}>
-              <View style={styles.grandTotalInfo}>
-                <Text style={styles.grandTotalLabel}>Grand Total Pending Amount</Text>
-                <Text style={styles.grandTotalAmount}>Php 582,001.50</Text>
-                <Text style={styles.grandTotalDate}>AS OF {currentDateTime}</Text>
-              </View>
-              <TouchableOpacity 
-                style={styles.payNowButtonGrand}
-                onPress={() => navigation.navigate('PayNow')}
-              >
-                <Text style={styles.payNowButtonTextGrand}>PAY NOW</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.walletCard}>
-            <View style={styles.walletHeader}>
-              <Text style={styles.walletTitle}>My Wallet Balance</Text>
-              <TouchableOpacity onPress={() => setShowTransactionHistory(true)}>
-                <MaterialIcons name="history" size={20} color="rgba(255, 255, 255, 0.8)" />
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.walletAmount}>Php {walletBalance.toFixed(2)}</Text>
-            <Text style={styles.grandTotalDate}>AS OF {currentDateTime}</Text>
-            
-            <View style={styles.walletActions}>
-              <TouchableOpacity 
-                style={styles.walletAction}
-                onPress={() => setShowTransferModal(true)}
-              >
-                <MaterialIcons name="send" size={20} color="white" />
-                <Text style={styles.walletActionText}>Transfer</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.walletAction}
-                onPress={() => setShowPayQRModal(true)}
-              >
-                <MaterialIcons name="qr-code" size={20} color="white" />
-                <Text style={styles.walletActionText}>Pay QR</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.walletAction}
-                onPress={() => setShowCashInModal(true)}
-              >
-                <MaterialIcons name="add-circle" size={20} color="white" />
-                <Text style={styles.walletActionText}>Cash In</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.walletAction}
-                onPress={() => setShowWalletActions(true)}
-              >
-                <MaterialIcons name="more-horiz" size={20} color="white" />
-                <Text style={styles.walletActionText}>More</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {/* Cards Row */}
-        <View style={styles.row}>
-          {/* Current Loan */}
-          <TouchableOpacity 
-            style={styles.card}
-            onPress={() => navigation.navigate('CurrentLoan')}
-          >
-            <Text style={styles.cardTitle}>Current Loan</Text>
-            <Text style={styles.cardValue}>Php 150,000.00</Text>
-          </TouchableOpacity>
-
-          {/* Next Payment without Pay Now (moved to Grand Total card) */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Next Payment Due</Text>
-            <Text style={styles.dueDate}>Aug 5, 2025</Text>
-            <Text style={styles.dueAmount}>Php 5,250.00</Text>
-          </View>
-        </View>
-
-        {/* Credit Score Card - Now standalone */}
-        <TouchableOpacity 
-          style={[styles.card, styles.fullWidthCard]}
-          onPress={() => setShowCreditScoreModal(true)}
-        >
-          <Text style={styles.cardTitle}>Credit Score</Text>
-          <View style={styles.creditScoreContainer}>
-            <Text style={styles.creditScore}>720</Text>
-            <Text style={styles.creditScoreLabel}>GOOD</Text>
-          </View>
-        </TouchableOpacity>
-
-        {/* Loan Application */}
-        <View style={styles.loanApplicationCard}>
-          <Text style={styles.loanTitle}>Need Loan?</Text>
-          <Text style={styles.loanText}>
-            Get approved in minutes with our quick application process
-          </Text>
-          <View style={styles.loanButtonsContainer}>
-            <TouchableOpacity 
-              style={styles.applyButton}
-              onPress={() => navigation.navigate('LoanApplication')}
-            >
-              <Text style={styles.applyButtonText}>+ Apply for a loan</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.howToLoanButton}
-              onPress={() => setShowHowToLoanModal(true)}
-            >
-              <Text style={styles.howToLoanButtonText}>How to Loan</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Recent Transactions */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent Transactions</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Transactions')}>
-            <Text style={styles.seeAllText}>See All</Text>
-          </TouchableOpacity>
-        </View>
-        
-        <View style={styles.transactionList}>
-          <TransactionItem 
-            type="Payment" 
-            amount="5,250.00" 
-            date="Jul 5, 2023" 
-            status="Completed"
-          />
-          <TransactionItem 
-            type="Loan Disbursement" 
-            amount="150,000.00" 
-            date="Jun 15, 2023" 
-            status="Completed"
-          />
-        </View>
-      </ScrollView>
-
-      {/* Bottom Navigation */}
-       <View style={styles.bottomNav}>
-      <TouchableOpacity style={styles.navItem}>
-        <View style={styles.navIcon}>
-          <Text style={styles.navIconText}>🏠</Text>
-        </View>
-        <Text style={styles.navTextActive}>Home</Text>
-      </TouchableOpacity>
-      <TouchableOpacity 
-        style={styles.navItem}
-        onPress={() => navigation.navigate('Loans')}
-      >
-        <View style={styles.navIcon}>
-          <Text style={styles.navIconText}>💵</Text>
-        </View>
-        <Text style={styles.navText}>Loans</Text>
-      </TouchableOpacity>
-      <TouchableOpacity 
-        style={styles.navItem}
-        onPress={() => navigation.navigate('Transactions')}
-      >
-        <View style={styles.navIcon}>
-          <Text style={styles.navIconText}>📊</Text>
-        </View>
-        <Text style={styles.navText}>Transactions</Text>
-      </TouchableOpacity>
-      <TouchableOpacity 
-        style={styles.navItem} 
-        onPress={() => navigation.navigate('Profile')}
-      >
-        <View style={styles.navIcon}>
-          <Text style={styles.navIconText}>👤</Text>
-        </View>
-        <Text style={styles.navText}>Profile</Text>
-      </TouchableOpacity>
-    </View>
-  </SafeAreaView>
-);
-};  
-
-const TransactionItem = ({ type, amount, date, status }) => {
-  return (
-    <View style={styles.transactionItem}>
-      <View style={styles.transactionIcon}>
-        <Text style={styles.transactionIconText}>
-          {type === 'Payment' ? '💸' : '🏦'}
+      <View style={styles.txMid}>
+        <Text style={[styles.txType, { color: C.text }]}>{tx.type}</Text>
+        <Text style={[styles.txDate, { color: C.subtext }]}>
+          {new Date(tx.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
         </Text>
       </View>
-      <View style={styles.transactionDetails}>
-        <Text style={styles.transactionType}>{type}</Text>
-        <Text style={styles.transactionDate}>{date}</Text>
-      </View>
-      <View style={styles.transactionAmountContainer}>
-        <Text style={styles.transactionAmount}>Php {amount}</Text>
-        <Text style={[
-          styles.transactionStatus,
-          status === 'Completed' ? styles.statusCompleted : styles.statusPending
-        ]}>
-          {status}
+      <View style={styles.txRight}>
+        <Text style={[styles.txAmt, { color: isOut ? '#EF4444' : '#10B981' }]}>
+          {isOut ? '-' : '+'}₱{tx.amount.toFixed(2)}
         </Text>
+        <View style={[styles.txPill, { backgroundColor: '#DCFCE7' }]}>
+          <Text style={[styles.txStatus, { color: '#166534' }]}>{tx.status}</Text>
+        </View>
       </View>
     </View>
   );
 };
 
+// ─── Main component ───────────────────────────────────────────────────────────
+const DashboardScreen = ({ navigation, route }) => {
+  const [dark, setDark] = useState(false);
+  const [unread, setUnread] = useState(true);
+
+  // modals
+  const [showNotif,      setShowNotif]      = useState(false);
+  const [showCredit,     setShowCredit]     = useState(false);
+  const [showLoanStatus, setShowLoanStatus] = useState(false);
+  const [showHowToLoan,  setShowHowToLoan]  = useState(false);
+  const [showSettings,   setShowSettings]   = useState(false);
+  const [showHistory,    setShowHistory]    = useState(false);
+
+  // wallet
+  const [balance,      setBalance]      = useState(15250.75);
+  const [hideBalance,  setHideBalance]  = useState(false);
+  const [transactions, setTransactions] = useState([
+    { id: 1, type: 'Transfer Out',      amount: 2500,  to: 'Juan Dela Cruz', bank: 'GCash',  date: new Date().toISOString(),                    status: 'Completed', note: 'Services' },
+    { id: 2, type: 'Cash In',           amount: 5000,  source: 'GCash',      date: new Date(Date.now() - 86400000).toISOString(),    status: 'Completed' },
+    { id: 3, type: 'QR Payment',        amount: 850,   merchant: 'Coffee Shop', date: new Date(Date.now() - 172800000).toISOString(), status: 'Completed' },
+    { id: 4, type: 'Loan Disbursement', amount: 49000,                          date: new Date(Date.now() - 259200000).toISOString(), status: 'Completed' },
+  ]);
+
+  // ── Reactive LoanStore subscription ──────────────────────────────────────
+  const [, forceUpdate] = useState(0);
+  useEffect(() => {
+    const listener = () => forceUpdate(n => n + 1);
+    LoanStore.subscribe(listener);
+    return () => LoanStore.unsubscribe(listener);
+  }, []);
+
+  // ── Credit score — derived from active loan or default ────────────────────
+  const activeLoan   = LoanStore.getActiveLoan();
+  const loanHistory  = LoanStore.getLoanHistory();          // failed + completed only
+  const allStoreTxns = LoanStore.getTransactions();
+
+  const [creditScore, setCreditScore] = useState(
+    activeLoan?.creditScore ?? 560
+  );
+  const [loanAppStatus, setLoanAppStatus] = useState(null);
+  const [clock, setClock] = useState('');
+
+  const [notifications, setNotifications] = useState([
+    { id: 1, icon: 'stars',                  iconColor: '#F59E0B', iconBg: '#FFFBEB', title: 'Points Earned! +20 pts',  msg: 'On-time loan repayment credited.',   time: '2 hrs ago',  read: false },
+    { id: 2, icon: 'check-circle',           iconColor: '#10B981', iconBg: '#ECFDF5', title: 'Loan Approved',           msg: 'Your loan has been approved.',       time: '1 day ago',  read: true  },
+    { id: 3, icon: 'workspace-premium',      iconColor: '#FB923C', iconBg: '#FFF7ED', title: 'Tier Upgrade 🎉 Gold',   msg: 'You reached Gold tier!',             time: '3 days ago', read: true  },
+    { id: 4, icon: 'payment',                iconColor: '#3B82F6', iconBg: '#EFF6FF', title: 'Payment Due Soon',        msg: 'Payment of ₱2,273 due Aug 5, 2025.', time: '4 days ago', read: true  },
+    { id: 5, icon: 'account-balance-wallet', iconColor: '#10B981', iconBg: '#ECFDF5', title: 'Cash In Successful',     msg: '₱5,000 added via GCash.',            time: '5 days ago', read: true  },
+  ]);
+
+  // ── Colour palette ────────────────────────────────────────────────────────
+  const C = {
+    bg:          dark ? '#0F172A' : '#F3F4F6',
+    card:        dark ? '#1E293B' : '#FFFFFF',
+    border:      dark ? '#334155' : '#E5E7EB',
+    text:        dark ? '#F1F5F9' : '#1F2937',
+    subtext:     dark ? '#94A3B8' : '#6B7280',
+    faint:       dark ? '#334155' : '#F9FAFB',
+    headerBg:    dark ? '#1E293B' : '#FFFFFF',
+    modalBg:     dark ? '#1E293B' : '#FFFFFF',
+    inputBg:     dark ? '#0F172A' : '#F9FAFB',
+    inputBorder: dark ? '#334155' : '#E5E7EB',
+    purple:      '#FB923C',
+    green:       '#10B981',
+    amber:       '#F59E0B',
+    red:         '#EF4444',
+  };
+
+  const tier = getCreditTier(creditScore);
+
+  // ── Live clock ────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const tick = () => setClock(new Date().toLocaleString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit', hour12: true,
+    }).toUpperCase());
+    tick();
+    const t = setInterval(tick, 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const addNotif = (n) => { setNotifications(p => [n, ...p]); setUnread(true); };
+
+  // ── Incoming navigation params ─────────────────────────────────────────────
+  // Use a ref to track which loanIds we've already processed so the effect
+  // never fires twice for the same disbursement, and we never call setParams
+  // inside the effect (which would re-trigger it and cause infinite loops).
+  const processedDisbursements = useRef(new Set());
+
+  const loanDisbursement = route.params?.loanDisbursement;
+  const newTransaction   = route.params?.newTransaction;
+
+  useEffect(() => {
+    if (loanDisbursement) {
+      const key = loanDisbursement.loanId;
+      // Guard: only process each disbursement once
+      if (!processedDisbursements.current.has(key)) {
+        processedDisbursements.current.add(key);
+
+        const amt = loanDisbursement.netRelease || 0;
+        setBalance(prev => prev + amt);
+        setTransactions(prev => [{
+          id:     `DISB-${key}`,
+          type:   'Loan Disbursement',
+          amount: amt,
+          source: loanDisbursement.lender,
+          date:   loanDisbursement.date || new Date().toISOString(),
+          status: 'Completed',
+          note:   `${loanDisbursement.loanType} · ${key}`,
+        }, ...prev]);
+        addNotif({
+          id:        `NOTIF-${key}`,
+          icon:      'account-balance',
+          iconColor: '#10B981',
+          iconBg:    '#ECFDF5',
+          title:     '💸 Loan Disbursed!',
+          msg:       `${fmtCurrency(amt)} from ${loanDisbursement.lender} added to your wallet.`,
+          time:      'Just now',
+          read:      false,
+        });
+        const currentActive = LoanStore.getActiveLoan();
+        if (currentActive?.creditScore) setCreditScore(currentActive.creditScore);
+      }
+    }
+  }, [loanDisbursement]);
+
+  useEffect(() => {
+    if (newTransaction) {
+      setTransactions(p => [newTransaction, ...p]);
+      if (newTransaction.amount) setBalance(p => Math.max(0, p - (newTransaction.amount || 0)));
+    }
+  }, [newTransaction]);
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  const handleTransfer = (tx) => {
+    setBalance(prev => prev - tx.amount);
+    setTransactions(prev => [{ id: Date.now(), type: 'Transfer Out', amount: tx.amount, to: tx.to, bank: tx.bank, date: tx.date, status: 'Completed', note: tx.note }, ...prev]);
+    setCreditScore(prev => Math.min(850, prev + 5));
+    addNotif({ id: Date.now(), icon: 'send', iconColor: '#FB923C', iconBg: '#FFF7ED', title: 'Transfer Successful', msg: `₱${tx.amount.toFixed(2)} sent to ${tx.to}`, time: 'Just now', read: false });
+  };
+
+  const handleCashIn = (tx) => {
+    setBalance(prev => prev + tx.amount);
+    setTransactions(prev => [{ id: Date.now(), type: 'Cash In', amount: tx.amount, source: tx.method, date: tx.date, status: 'Completed' }, ...prev]);
+    if (tx.amount >= 1000) setCreditScore(prev => Math.min(850, prev + 5));
+    addNotif({ id: Date.now(), icon: 'add-circle', iconColor: '#10B981', iconBg: '#ECFDF5', title: 'Cash In Successful', msg: `₱${tx.amount.toFixed(2)} added via ${tx.method}`, time: 'Just now', read: false });
+  };
+
+  const handleQRPay = (tx) => {
+    setBalance(prev => prev - tx.amount);
+    setTransactions(prev => [{ id: Date.now(), type: 'QR Payment', amount: tx.amount, merchant: 'QR Merchant', date: tx.date, status: 'Completed' }, ...prev]);
+    setCreditScore(prev => Math.min(850, prev + 5));
+    addNotif({ id: Date.now(), icon: 'qr-code', iconColor: '#3B82F6', iconBg: '#EFF6FF', title: 'QR Payment Successful', msg: `₱${tx.amount.toFixed(2)} paid`, time: 'Just now', read: false });
+  };
+
+  const handleLogout = () => Alert.alert('Log Out', 'Are you sure?', [
+    { text: 'Cancel', style: 'cancel' },
+    { text: 'Log Out', style: 'destructive', onPress: () => navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] }) },
+  ]);
+
+  const markAllRead = () => { setNotifications(ns => ns.map(n => ({ ...n, read: true }))); setUnread(false); };
+
+  // ── Reusable buttons ──────────────────────────────────────────────────────
+  const PrimaryBtn = ({ title, onPress, disabled }) => (
+    <TouchableOpacity style={[styles.primaryBtn, disabled && styles.disabledBtn]} onPress={onPress} disabled={disabled}>
+      <Text style={styles.primaryBtnTxt}>{title}</Text>
+    </TouchableOpacity>
+  );
+  const SecondaryBtn = ({ title, onPress }) => (
+    <TouchableOpacity style={[styles.secondaryBtn, { backgroundColor: C.faint }]} onPress={onPress}>
+      <Text style={[styles.secondaryBtnTxt, { color: C.text }]}>{title}</Text>
+    </TouchableOpacity>
+  );
+
+  // ── Modal wrappers ────────────────────────────────────────────────────────
+  const BottomSheet = ({ visible, onClose, children, tall }) => (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <View style={styles.overlay}>
+        <View style={[styles.sheet, { backgroundColor: C.modalBg, maxHeight: tall ? '92%' : '85%' }]}>
+          <TouchableOpacity style={styles.sheetClose} onPress={onClose}>
+            <MaterialIcons name="close" size={22} color={C.subtext} />
+          </TouchableOpacity>
+          {children}
+        </View>
+      </View>
+    </Modal>
+  );
+
+  const FullModal = ({ visible, onClose, title, children, rightAction }) => (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <SafeAreaView style={[styles.fullModal, { backgroundColor: C.bg }]}>
+        <View style={[styles.fullModalHeader, { backgroundColor: C.headerBg, borderBottomColor: C.border }]}>
+          <TouchableOpacity onPress={onClose} style={{ padding: 4 }}>
+            <MaterialIcons name="arrow-back" size={24} color={C.text} />
+          </TouchableOpacity>
+          <Text style={[styles.fullModalTitle, { color: C.text }]}>{title}</Text>
+          {rightAction || <View style={{ width: 32 }} />}
+        </View>
+        {children}
+      </SafeAreaView>
+    </Modal>
+  );
+
+  // ── Transaction History ───────────────────────────────────────────────────
+  const HistoryModal = () => {
+    const totalIn  = transactions.filter(t => ['Cash In', 'Loan Disbursement'].includes(t.type)).reduce((a, t) => a + t.amount, 0);
+    const totalOut = transactions.filter(t => ['Transfer Out', 'QR Payment'].includes(t.type)).reduce((a, t) => a + t.amount, 0);
+    return (
+      <FullModal visible={showHistory} onClose={() => setShowHistory(false)} title="Wallet History">
+        <View style={[styles.histSum, { backgroundColor: C.card, borderBottomColor: C.border }]}>
+          {[
+            ['Total In',  `+₱${totalIn.toFixed(2)}`,  '#10B981'],
+            ['Total Out', `-₱${totalOut.toFixed(2)}`, '#EF4444'],
+            ['Txns',      transactions.length,         C.text],
+          ].map(([k, v, c]) => (
+            <View key={k} style={styles.histSumItem}>
+              <Text style={[styles.histSumVal, { color: c }]}>{v}</Text>
+              <Text style={[styles.histSumLbl, { color: C.subtext }]}>{k}</Text>
+            </View>
+          ))}
+        </View>
+        <ScrollView contentContainerStyle={{ padding: 16 }}>
+          {transactions.map(tx => (
+            <View key={tx.id} style={[styles.histCard, { backgroundColor: C.card }]}>
+              <TxRow tx={tx} C={C} />
+            </View>
+          ))}
+        </ScrollView>
+      </FullModal>
+    );
+  };
+
+  // ── Notifications ─────────────────────────────────────────────────────────
+  const NotifModal = () => (
+    <FullModal visible={showNotif} onClose={() => setShowNotif(false)} title="Notifications"
+      rightAction={
+        <TouchableOpacity onPress={markAllRead}>
+          <Text style={{ color: C.purple, fontSize: 12, fontWeight: '600' }}>Mark all read</Text>
+        </TouchableOpacity>
+      }
+    >
+      <ScrollView>
+        {notifications.map(n => (
+          <TouchableOpacity
+            key={n.id}
+            style={[styles.notifRow, { borderBottomColor: C.border }, !n.read && { backgroundColor: dark ? '#1E2D4A' : '#F5F3FF' }]}
+            onPress={() => setNotifications(ns => ns.map(x => x.id === n.id ? { ...x, read: true } : x))}
+          >
+            <View style={[styles.notifIcon, { backgroundColor: n.iconBg }]}>
+              <MaterialIcons name={n.icon} size={20} color={n.iconColor} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={[styles.notifTitle, { color: C.text }]}>{n.title}</Text>
+                {!n.read && <View style={[styles.unreadDot, { backgroundColor: C.purple }]} />}
+              </View>
+              <Text style={[styles.notifMsg, { color: C.subtext }]}>{n.msg}</Text>
+              <Text style={[styles.notifTime, { color: C.subtext }]}>{n.time}</Text>
+            </View>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </FullModal>
+  );
+
+  // ── Credit Score ──────────────────────────────────────────────────────────
+  const CreditModal = () => (
+    <BottomSheet visible={showCredit} onClose={() => setShowCredit(false)} tall>
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <Text style={[styles.sheetTitle, { color: C.text }]}>Your Credit Profile</Text>
+        <View style={styles.scoreCircleWrap}>
+          <View style={[styles.scoreCircleOuter, { backgroundColor: C.faint }]}>
+            {[
+              { color: '#EF4444', start: 0   },
+              { color: '#F97316', start: 54  },
+              { color: '#F59E0B', start: 108 },
+              { color: '#10B981', start: 162 },
+              { color: '#059669', start: 216 },
+            ].map((seg, i) => {
+              const needle = ((creditScore - 200) / 650) * 270;
+              return (
+                <View key={i} style={[styles.scoreArc, { borderColor: seg.color, transform: [{ rotate: `${-135 + seg.start}deg` }], opacity: needle >= seg.start ? 1 : 0.15 }]} />
+              );
+            })}
+            <View style={[styles.scoreInner, { backgroundColor: C.card }]}>
+              <Text style={[styles.scoreNum,  { color: C.text }]}>{creditScore}</Text>
+              <Text style={[styles.scoreTier, { color: tier.color }]}>{tier.label.toUpperCase()}</Text>
+              <Text style={[styles.scoreOf,   { color: C.subtext }]}>/ 850</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Tier Ladder */}
+        <View style={[styles.tierLadder, { backgroundColor: C.faint }]}>
+          <Text style={[styles.tierTitle, { color: C.text }]}>Loan Tier Ladder</Text>
+          {[
+            { r: '200–299', l: '₱5,000',   min: 200 },
+            { r: '300–399', l: '₱10,000',  min: 300 },
+            { r: '400–499', l: '₱20,000',  min: 400 },
+            { r: '500+',    l: '₱50,000+', min: 500 },
+          ].map((t, i) => {
+            const isActive = creditScore >= t.min && (i === 3 || creditScore < [300, 400, 500, 851][i]);
+            return (
+              <View key={i} style={[styles.tierRow, { borderBottomColor: C.border }, isActive && { backgroundColor: dark ? '#431407' : '#FFF7ED', borderRadius: 8, paddingHorizontal: 8 }]}>
+                <Text style={[styles.tierRange, { color: isActive ? C.purple : C.subtext, fontWeight: isActive ? '700' : '400' }]}>{t.r}</Text>
+                <Text style={[styles.tierLoan,  { color: isActive ? C.purple : C.text }]}>{t.l}</Text>
+                {isActive && <MaterialIcons name="check-circle" size={15} color={C.purple} />}
+              </View>
+            );
+          })}
+          <Text style={[styles.tierHint, { color: C.subtext }]}>Pay on time (+20 pts) or do transactions (+5 pts).</Text>
+        </View>
+
+        {/* Score Factors */}
+        <Text style={[styles.scoreFactorsTitle, { color: C.text }]}>Score Factors</Text>
+        {[
+          { t: 'Payment History',    p: 85, c: '#10B981' },
+          { t: 'Credit Utilization', p: 70, c: '#F59E0B' },
+          { t: 'History Length',     p: 60, c: '#FB923C' },
+          { t: 'Credit Mix',         p: 75, c: '#10B981' },
+          { t: 'New Credit',         p: 80, c: '#10B981' },
+        ].map((f, i) => (
+          <View key={i} style={{ marginBottom: 12 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+              <Text style={{ fontSize: 13, color: C.text }}>{f.t}</Text>
+              <Text style={{ fontSize: 13, color: C.subtext }}>{f.p}%</Text>
+            </View>
+            <View style={{ height: 6, borderRadius: 3, overflow: 'hidden', backgroundColor: C.faint }}>
+              <View style={{ width: `${f.p}%`, height: '100%', backgroundColor: f.c, borderRadius: 3 }} />
+            </View>
+          </View>
+        ))}
+        <View style={styles.rowBtns}>
+          <SecondaryBtn title="Full Report" onPress={() => { setShowCredit(false); navigation.navigate('CreditReport'); }} />
+          <PrimaryBtn title="Apply for Loan" onPress={() => { setShowCredit(false); navigation.navigate('LoanApplication'); }} />
+        </View>
+      </ScrollView>
+    </BottomSheet>
+  );
+
+  // ── How to Loan ───────────────────────────────────────────────────────────
+  const HowToLoanModal = () => (
+    <BottomSheet visible={showHowToLoan} onClose={() => setShowHowToLoan(false)} tall>
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <Text style={[styles.sheetTitle, { color: C.text }]}>How to Get a Loan</Text>
+        {[
+          { n: '1', t: 'Check Your Credit Score', d: 'Your score determines how much you can borrow and at what rate.' },
+          { n: '2', t: 'Apply Online',            d: 'Fill out the form: amount, term, purpose, and select lenders.' },
+          { n: '3', t: 'Upload Documents',        d: 'Submit valid ID, payslip, and other required files.' },
+          { n: '4', t: 'Wait for Approval',       d: 'Lenders review within 1–5 business days.' },
+          { n: '5', t: 'Receive Funds',            d: 'Approved loan is deposited directly to your Lora wallet.' },
+        ].map(step => (
+          <View key={step.n} style={styles.howStep}>
+            <View style={[styles.howNum, { backgroundColor: C.purple }]}>
+              <Text style={styles.howNumTxt}>{step.n}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.howTitle, { color: C.text }]}>{step.t}</Text>
+              <Text style={[styles.howDesc,  { color: C.subtext }]}>{step.d}</Text>
+            </View>
+          </View>
+        ))}
+        <PrimaryBtn title="Apply Now" onPress={() => { setShowHowToLoan(false); navigation.navigate('LoanApplication'); }} />
+      </ScrollView>
+    </BottomSheet>
+  );
+
+  // ── Loan Status Modal ─────────────────────────────────────────────────────
+  const LoanStatusModal = () => (
+    <BottomSheet visible={showLoanStatus} onClose={() => setShowLoanStatus(false)}>
+      <MaterialIcons name="check-circle" size={52} color="#10B981" style={{ alignSelf: 'center', marginBottom: 12 }} />
+      <Text style={[styles.sheetTitle, { color: C.text, textAlign: 'center' }]}>Application Submitted!</Text>
+      <Text style={[{ textAlign: 'center', marginBottom: 16, color: C.subtext }]}>Your loan is being processed.</Text>
+      {loanAppStatus && (
+        <View style={[styles.confirmBox, { backgroundColor: C.faint }]}>
+          {[
+            ['App ID', loanAppStatus.id],
+            ['Amount', loanAppStatus.amount],
+            ['Term',   loanAppStatus.term && `${loanAppStatus.term} months`],
+          ].map(([k, v]) => v ? (
+            <View key={k} style={[styles.confirmRow, { borderBottomColor: C.border }]}>
+              <Text style={[styles.confirmKey, { color: C.subtext }]}>{k}</Text>
+              <Text style={[styles.confirmVal, { color: C.text }]}>{v}</Text>
+            </View>
+          ) : null)}
+        </View>
+      )}
+      <PrimaryBtn title="Got it!" onPress={() => setShowLoanStatus(false)} />
+    </BottomSheet>
+  );
+
+  // ── Settings ──────────────────────────────────────────────────────────────
+  const SettingsModal = () => (
+    <FullModal visible={showSettings} onClose={() => setShowSettings(false)} title="Settings">
+      <ScrollView contentContainerStyle={{ padding: 20 }}>
+        <View style={[styles.settingCard, { backgroundColor: C.card }]}>
+          <Text style={[styles.settingGroupTitle, { color: C.subtext }]}>APPEARANCE</Text>
+          <View style={[styles.settingRow, { borderBottomColor: C.border }]}>
+            <View style={styles.settingLeft}>
+              <MaterialIcons name="dark-mode" size={22} color={C.purple} />
+              <View style={{ marginLeft: 12 }}>
+                <Text style={[styles.settingLabel, { color: C.text }]}>Dark Mode</Text>
+                <Text style={[styles.settingSub,   { color: C.subtext }]}>Switch to dark theme</Text>
+              </View>
+            </View>
+            <Switch value={dark} onValueChange={setDark} trackColor={{ false: '#D1D5DB', true: '#FB923C' }} thumbColor="white" />
+          </View>
+        </View>
+        <View style={[styles.settingCard, { backgroundColor: C.card }]}>
+          <Text style={[styles.settingGroupTitle, { color: C.subtext }]}>SECURITY</Text>
+          {[
+            { icon: 'fingerprint',   label: 'Biometric Login',    sub: 'Use fingerprint to sign in' },
+            { icon: 'lock',          label: 'Change PIN',         sub: 'Update your security PIN' },
+            { icon: 'notifications', label: 'Push Notifications', sub: 'Receive alerts and reminders' },
+          ].map((item, i, arr) => (
+            <TouchableOpacity key={item.label} style={[styles.settingRow, { borderBottomColor: i < arr.length - 1 ? C.border : 'transparent' }]}>
+              <View style={styles.settingLeft}>
+                <MaterialIcons name={item.icon} size={22} color={C.purple} />
+                <View style={{ marginLeft: 12 }}>
+                  <Text style={[styles.settingLabel, { color: C.text }]}>{item.label}</Text>
+                  <Text style={[styles.settingSub,   { color: C.subtext }]}>{item.sub}</Text>
+                </View>
+              </View>
+              <MaterialIcons name="chevron-right" size={22} color={C.subtext} />
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={[styles.settingCard, { backgroundColor: C.card }]}>
+          <Text style={[styles.settingGroupTitle, { color: C.subtext }]}>ACCOUNT</Text>
+          {[
+            { icon: 'person',       label: 'Edit Profile',   sub: 'Update your personal info' },
+            { icon: 'help-outline', label: 'Help & Support', sub: 'FAQ, contact us' },
+            { icon: 'privacy-tip',  label: 'Privacy Policy', sub: 'How we use your data' },
+          ].map((item, i, arr) => (
+            <TouchableOpacity key={item.label} style={[styles.settingRow, { borderBottomColor: i < arr.length - 1 ? C.border : 'transparent' }]}>
+              <View style={styles.settingLeft}>
+                <MaterialIcons name={item.icon} size={22} color={C.purple} />
+                <View style={{ marginLeft: 12 }}>
+                  <Text style={[styles.settingLabel, { color: C.text }]}>{item.label}</Text>
+                  <Text style={[styles.settingSub,   { color: C.subtext }]}>{item.sub}</Text>
+                </View>
+              </View>
+              <MaterialIcons name="chevron-right" size={22} color={C.subtext} />
+            </TouchableOpacity>
+          ))}
+        </View>
+        <TouchableOpacity style={[styles.logoutBtn, { borderColor: C.red }]} onPress={handleLogout}>
+          <MaterialIcons name="logout" size={20} color={C.red} />
+          <Text style={[styles.logoutBtnTxt, { color: C.red }]}>Log Out</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </FullModal>
+  );
+
+  // ── Main render ───────────────────────────────────────────────────────────
+  const totIn  = transactions.filter(t => ['Cash In', 'Loan Disbursement'].includes(t.type)).reduce((a, t) => a + t.amount, 0);
+  const totOut = transactions.filter(t => ['Transfer Out', 'QR Payment'].includes(t.type)).reduce((a, t) => a + t.amount, 0);
+
+  return (
+    <ThemeContext.Provider value={{ dark, toggle: () => setDark(!dark) }}>
+      <SafeAreaView style={[styles.root, { backgroundColor: C.bg }]} edges={['top']}>
+
+        <HistoryModal />
+        <NotifModal />
+        <CreditModal />
+        <SettingsModal />
+        <HowToLoanModal />
+        <LoanStatusModal />
+
+        {/* ── Top header ── */}
+        <View style={[styles.header, { backgroundColor: C.headerBg, borderBottomColor: C.border }]}>
+
+          {/* Left — Logo wordmark */}
+          <View style={styles.headerLeft}>
+            {/* Logo mark: layered hexagonal badge */}
+            <View style={styles.logoMark}>
+              <Image
+                source={require('../assets/LoraLogo.png')}
+                style={styles.logoImg}
+                resizeMode="cover"
+              />
+              <View style={[styles.logoMarkAccent, { backgroundColor: dark ? '#A78BFA' : '#FED7AA', borderColor: dark ? '#0F172A' : '#FFFFFF' }]} />
+            </View>
+
+            {/* Brand name + tagline */}
+            <View style={styles.headerBrandBlock}>
+              <View style={styles.headerBrandRow}>
+                <Text style={[styles.appName, { color: dark ? '#F1F5F9' : '#1C1007' }]}>Lora</Text>
+                <View style={[styles.appBadge, { backgroundColor: dark ? '#4C1D95' : '#FFF7ED' }]}>
+                  <Text style={[styles.appBadgeTxt, { color: dark ? '#FED7AA' : '#EA580C' }]}>Finance</Text>
+                </View>
+              </View>
+              {/* Tier pill under brand — driven by real credit tier */}
+              <View style={[styles.headerTierPill, { backgroundColor: tier.color + (dark ? '30' : '18') }]}>
+                <View style={[styles.headerTierDot, { backgroundColor: tier.color }]} />
+                <Text style={[styles.headerTierTxt, { color: tier.color }]}>{tier.label} Member</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Center — greeting (fills space, truncated) */}
+          <View style={styles.headerCenter}>
+            <Text style={[styles.headerGreeting, { color: C.subtext }]} numberOfLines={1}>
+              {(() => {
+                const h = new Date().getHours();
+                return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+              })()}
+            </Text>
+            <Text style={[styles.headerName, { color: C.text }]} numberOfLines={1}>Juan Dela Cruz</Text>
+          </View>
+
+          {/* Right — action buttons */}
+          <View style={styles.headerRight}>
+            {/* Search */}
+            <TouchableOpacity
+              style={[styles.hIconBtn, { backgroundColor: dark ? '#334155' : '#F1F5F9' }]}
+              onPress={() => setShowSettings(true)}
+              activeOpacity={0.75}
+            >
+              <MaterialIcons name="settings" size={18} color={dark ? '#94A3B8' : '#64748B'} />
+            </TouchableOpacity>
+
+            {/* Notifications with badge */}
+            <TouchableOpacity
+              style={[styles.hIconBtn, { backgroundColor: dark ? '#334155' : '#F1F5F9' }, unread && { backgroundColor: dark ? '#431407' : '#FFF7ED' }]}
+              onPress={() => setShowNotif(true)}
+              activeOpacity={0.75}
+            >
+              <MaterialIcons
+                name="notifications"
+                size={18}
+                color={unread ? '#FB923C' : (dark ? '#94A3B8' : '#64748B')}
+              />
+              {unread && (
+                <View style={styles.notifBadge}>
+                  <Text style={styles.notifBadgeTxt}>
+                    {notifications.filter(n => !n.read).length > 9 ? '9+' : notifications.filter(n => !n.read).length}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            {/* Avatar */}
+            <TouchableOpacity
+              style={styles.headerAvatar}
+              onPress={() => navigation.navigate('Profile')}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.headerAvatarInner, { backgroundColor: tier.color }]}>
+                <Text style={styles.headerAvatarTxt}>JD</Text>
+              </View>
+              <View style={[styles.headerAvatarStatus, { backgroundColor: '#10B981', borderColor: C.headerBg }]} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* ── Scroll content ── */}
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+
+          {/* ── Wallet card ── */}
+          <View style={styles.walletCard}>
+            <View style={styles.walletTop}>
+              <View>
+                <Text style={styles.walletLabel}>My Wallet</Text>
+                <Text style={styles.walletClock}>{clock}</Text>
+              </View>
+              <TouchableOpacity onPress={() => setHideBalance(h => !h)}>
+                <MaterialIcons name={hideBalance ? 'visibility-off' : 'visibility'} size={20} color="rgba(255,255,255,0.75)" />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.walletAmt}>
+              {hideBalance ? '₱ ••••••' : `₱ ${balance.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`}
+            </Text>
+            <View style={styles.walletStats}>
+              <MaterialIcons name="trending-up"   size={13} color="rgba(255,255,255,0.7)" />
+              <Text style={styles.walletStatTxt}>In ₱{totIn.toFixed(0)}</Text>
+              <View style={styles.walletStatSep} />
+              <MaterialIcons name="trending-down" size={13} color="rgba(255,255,255,0.7)" />
+              <Text style={styles.walletStatTxt}>Out ₱{totOut.toFixed(0)}</Text>
+              <View style={styles.walletStatSep} />
+              <MaterialIcons name="receipt"       size={13} color="rgba(255,255,255,0.7)" />
+              <Text style={styles.walletStatTxt}>{transactions.length} txns</Text>
+            </View>
+            <View style={styles.walletActions}>
+              {[
+                { icon: 'send',              label: 'Transfer', onPress: () => navigation.navigate('Transfer', { balance, onTransfer: handleTransfer }) },
+                { icon: 'qr-code',           label: 'Pay QR',   onPress: () => navigation.navigate('QRPay',    { balance, onQRPay: handleQRPay }) },
+                { icon: 'add-circle-outline',label: 'Cash In',  onPress: () => navigation.navigate('CashIn',   { balance, onCashIn: handleCashIn }) },
+                { icon: 'history',           label: 'History',  onPress: () => setShowHistory(true) },
+              ].map(a => (
+                <TouchableOpacity key={a.label} style={styles.walletActionBtn} onPress={a.onPress} activeOpacity={0.8}>
+                  <View style={styles.walletActionIcon}>
+                    <MaterialIcons name={a.icon} size={20} color="#FB923C" />
+                  </View>
+                  <Text style={styles.walletActionLabel}>{a.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* ── Summary cards — data from LoanStore ── */}
+          <View style={styles.cardRow}>
+            {/* Active loan card — shows live data or "no loan" state */}
+            <TouchableOpacity
+              style={[styles.smallCard, { backgroundColor: C.card }]}
+              onPress={() => navigation.navigate(activeLoan ? 'CurrentLoan' : 'LoanApplication')}
+            >
+              <MaterialIcons name="account-balance" size={20} color={activeLoan ? '#FB923C' : '#9CA3AF'} style={{ marginBottom: 6 }} />
+              <Text style={[styles.smallCardLabel, { color: C.subtext }]}>Current Loan</Text>
+              {activeLoan ? (
+                <>
+                  <Text style={[styles.smallCardValue, { color: C.text }]}>{fmtCurrency(activeLoan.amount)}</Text>
+                  <Text style={[styles.smallCardSub, { color: '#FB923C' }]}>{activeLoan.creditTier} Tier</Text>
+                </>
+              ) : (
+                <>
+                  <Text style={[styles.smallCardValue, { color: '#9CA3AF', fontSize: 13 }]}>No active loan</Text>
+                  <Text style={[styles.smallCardSub, { color: '#FB923C' }]}>Tap to apply →</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            {/* Next payment card — shows due date or loan history count */}
+            <TouchableOpacity
+              style={[styles.smallCard, { backgroundColor: C.card }]}
+              onPress={() => activeLoan ? navigation.navigate('CurrentLoan') : navigation.navigate('Loans')}
+            >
+              <MaterialIcons name={activeLoan ? 'event' : 'history'} size={20} color={activeLoan ? '#F59E0B' : '#9CA3AF'} style={{ marginBottom: 6 }} />
+              {activeLoan ? (
+                <>
+                  <Text style={[styles.smallCardLabel, { color: C.subtext }]}>Next Payment</Text>
+                  <Text style={[styles.smallCardDate,  { color: '#F59E0B' }]}>{activeLoan.nextDueDate}</Text>
+                  <Text style={[styles.smallCardValue, { color: C.text }]}>{fmtCurrency(activeLoan.monthlyPayment)}</Text>
+                </>
+              ) : (
+                <>
+                  <Text style={[styles.smallCardLabel, { color: C.subtext }]}>Loan History</Text>
+                  <Text style={[styles.smallCardValue, { color: C.text }]}>{loanHistory.length} loan{loanHistory.length !== 1 ? 's' : ''}</Text>
+                  <Text style={[styles.smallCardSub, { color: '#9CA3AF' }]}>
+                    {loanHistory.filter(l => l.status === 'Completed').length} completed · {loanHistory.filter(l => l.status === 'Failed').length} declined
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {/* ── Credit score card ── */}
+          <TouchableOpacity style={[styles.creditCard, { backgroundColor: C.card }]} onPress={() => setShowCredit(true)}>
+            <View style={styles.arcWrap}>
+              {[
+                { color: '#EF4444', start: 0   },
+                { color: '#F97316', start: 54  },
+                { color: '#F59E0B', start: 108 },
+                { color: '#10B981', start: 162 },
+                { color: '#059669', start: 216 },
+              ].map((seg, i) => {
+                const needle = ((creditScore - 200) / 650) * 270;
+                return (
+                  <View key={i} style={[styles.arcSeg, { borderColor: seg.color, transform: [{ rotate: `${-135 + seg.start}deg` }], opacity: needle >= seg.start ? 1 : 0.18 }]} />
+                );
+              })}
+              <View style={[styles.arcInner, { backgroundColor: C.card }]}>
+                <Text style={[styles.arcScore, { color: tier.color }]}>{creditScore}</Text>
+                <Text style={[styles.arcTier,  { color: tier.color }]}>{tier.label}</Text>
+                <Text style={[styles.arcOf,    { color: C.subtext }]}>/ 850</Text>
+              </View>
+            </View>
+            <View style={{ flex: 1, marginLeft: 14 }}>
+              <Text style={[styles.smallCardLabel, { color: C.subtext }]}>Credit Score</Text>
+              <Text style={[styles.smallCardValue, { color: C.text }]}>{fmtCurrency(tier.maxLoan)} max</Text>
+              <Text style={[styles.creditTierBadge, { color: tier.color }]}>{tier.label} Tier</Text>
+              {(() => { const next = CREDIT_TIERS.find(t => t.min > creditScore); return next ? (
+                <Text style={[styles.creditPts, { color: C.subtext }]}>{next.min - creditScore} pts to {next.label}</Text>
+              ) : null; })()}
+              <Text style={[styles.creditTap, { color: C.purple }]}>Tap for details →</Text>
+            </View>
+          </TouchableOpacity>
+
+          {/* ── Loan promo ── */}
+          <View style={[styles.loanCard, { backgroundColor: dark ? '#431407' : '#FFF7ED', borderColor: dark ? '#4C1D95' : '#FFEDD5' }]}>
+            <Text style={[styles.loanTitle, { color: C.text }]}>Need a Loan?</Text>
+            <Text style={[styles.loanSub,   { color: C.subtext }]}>Get approved in minutes. Quick & secure.</Text>
+            <View style={styles.loanBtns}>
+              <TouchableOpacity style={styles.loanApplyBtn} onPress={() => navigation.navigate('LoanApplication')}>
+                <MaterialIcons name="add" size={16} color="white" />
+                <Text style={styles.loanApplyBtnTxt}>Apply for a Loan</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.loanHowBtn, { backgroundColor: C.card, borderColor: dark ? '#4C1D95' : '#FFEDD5' }]} onPress={() => setShowHowToLoan(true)}>
+                <Text style={[styles.loanHowBtnTxt, { color: C.purple }]}>How to Loan</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* ── Recent transactions — wallet + loan store merged ── */}
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: C.text }]}>Recent Transactions</Text>
+            <TouchableOpacity onPress={() => setShowHistory(true)}>
+              <Text style={[styles.seeAll, { color: C.purple }]}>See All</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={[styles.txList, { backgroundColor: C.card }]}>
+            {[
+              ...transactions,
+              ...allStoreTxns.map(t => ({
+                id:     t.id,
+                type:   t.type,
+                amount: t.amountNum ?? parseFloat(t.amount) ?? 0,
+                date:   t.date,
+                status: t.status,
+              })),
+            ]
+              .sort((a, b) => new Date(b.date) - new Date(a.date))
+              .slice(0, 4)
+              .map(tx => <TxRow key={tx.id} tx={tx} C={C} />)}
+          </View>
+
+        </ScrollView>
+
+        {/* ── Bottom nav ── */}
+        <View style={[styles.bottomNav, { backgroundColor: C.headerBg, borderTopColor: C.border }]}>
+          {[
+            { icon: '🏠', label: 'Home',         onPress: () => {} },
+            { icon: '💵', label: 'Loans',        onPress: () => navigation.navigate('Loans', { darkMode: dark }) },
+            { icon: '📊', label: 'Transactions', onPress: () => navigation.navigate('Transactions') },
+            { icon: '👤', label: 'Profile',      onPress: () => navigation.navigate('Profile') },
+          ].map(n => (
+            <TouchableOpacity key={n.label} style={styles.navItem} onPress={n.onPress}>
+              <Text style={styles.navEmoji}>{n.icon}</Text>
+              <Text style={[styles.navLabel, { color: n.label === 'Home' ? '#FB923C' : C.subtext }, n.label === 'Home' && { fontWeight: '700' }]}>
+                {n.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </SafeAreaView>
+    </ThemeContext.Provider>
+  );
+};
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  // Enhanced Credit Score Meter Styles
-  enhancedMeterContainer: {
-    alignItems: 'center',
-    marginBottom: 30,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  scoreCircleContainer: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  scoreCircleOuter: {
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    backgroundColor: '#F8FAFC',
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-    borderWidth: 8,
-    borderColor: '#F1F5F9',
-  },
-  scoreCircleProgress: {
-    position: 'absolute',
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    borderWidth: 8,
-    borderLeftColor: '#F1F5F9',
-    borderBottomColor: '#F1F5F9',
-    transform: [{ rotate: '-135deg' }],
-  },
-  scoreCircleInner: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: 'white',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  scoreCircleNumber: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#1F2937',
-  },
-  scoreCircleStatus: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  scoreCircleLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  scoreRanges: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-    marginBottom: 20,
-  },
-  scoreRangeItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  rangeDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginBottom: 4,
-  },
-  rangeText: {
-    fontSize: 10,
-    color: '#6B7280',
-    fontWeight: '500',
-  },
-  rangeLabel: {
-    fontSize: 10,
-    color: '#9CA3AF',
-  },
-  quickStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '100%',
-    backgroundColor: '#F8FAFC',
-    borderRadius: 12,
-    padding: 16,
-  },
-  statItem: {
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  progressBarContainer: {
-    height: 6,
-    backgroundColor: '#E5E7EB',
-    borderRadius: 3,
-    marginBottom: 5,
-    overflow: 'hidden',
-  },
-  benefitsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-  benefitCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F0FDF4',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
-    width: '48%',
-    borderWidth: 1,
-    borderColor: '#DCFCE7',
-  },
+  root:          { flex: 1 },
+  scrollContent: { paddingBottom: 90 },
 
-  // Enhanced Transfer Modal Styles
-  progressSteps: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-    paddingHorizontal: 20,
-  },
-  step: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#E5E7EB',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  activeStep: {
-    backgroundColor: '#8B5CF6',
-  },
-  stepText: {
-    color: '#6B7280',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  activeStepText: {
-    color: 'white',
-  },
-  stepLabel: {
-    fontSize: 10,
-    color: '#9CA3AF',
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  activeStepLabel: {
-    color: '#8B5CF6',
-    fontWeight: '500',
-  },
-  stepLine: {
-    flex: 1,
-    height: 2,
-    backgroundColor: '#E5E7EB',
-    marginHorizontal: 8,
-  },
-  activeStepLine: {
-    backgroundColor: '#8B5CF6',
-  },
-  bankGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-  bankOptionCard: {
-    width: '48%',
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-    borderLeftWidth: 4,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  selectedBankOptionCard: {
-    backgroundColor: '#F8FAFC',
-    borderColor: '#8B5CF6',
-    shadowColor: '#8B5CF6',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  bankOptionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-  },
-  bankOptionInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  bankIcon: {
-    fontSize: 24,
-    marginRight: 8,
-  },
-  bankDetails: {
-    flex: 1,
-  },
-  bankName: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    marginBottom: 2,
-  },
-  bankDescription: {
-    fontSize: 10,
-    color: '#6B7280',
-  },
-  bankOptionFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  bankFee: {
-    fontSize: 10,
-    color: '#6B7280',
-  },
-  freeText: {
-    color: '#10B981',
-    fontWeight: 'bold',
-  },
-  feeText: {
-    color: '#EF4444',
-    fontWeight: '500',
-  },
-  bankProcessing: {
-    fontSize: 10,
-    color: '#6B7280',
-  },
-  selectedBankPreview: {
-    backgroundColor: '#F3F0FF',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-  },
-  selectedBankText: {
-    color: '#8B5CF6',
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-  transferForm: {
-    maxHeight: 400,
-  },
-  formActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 10,
-    marginTop: 16,
-  },
-  amountSummary: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 8,
-    padding: 16,
-    marginTop: 16,
-  },
-  amountRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  totalAmountRow: {
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    paddingTop: 8,
-    marginTop: 8,
-  },
-  amountLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  amountValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1F2937',
-  },
-  totalAmountLabel: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1F2937',
-  },
-  totalAmountValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#8B5CF6',
-  },
-  confirmationView: {
-    maxHeight: 400,
-  },
-  confirmationCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    marginBottom: 16,
-  },
-  confirmationTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  confirmationRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  confirmationTotal: {
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    paddingTop: 12,
-    marginTop: 8,
-  },
-  confirmationLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-    fontWeight: '500',
-  },
-  confirmationValue: {
-    fontSize: 14,
-    color: '#1F2937',
-    fontWeight: '500',
-    textAlign: 'right',
-    flex: 1,
-    marginLeft: 8,
-  },
-  confirmationTotalLabel: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1F2937',
-  },
-  confirmationTotalValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#8B5CF6',
-  },
-  warningBox: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFBEB',
-    borderColor: '#F59E0B',
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
-    alignItems: 'flex-start',
-  },
-  warningText: {
-    color: '#92400E',
-    fontSize: 12,
-    marginLeft: 8,
-    flex: 1,
-    lineHeight: 16,
-  },
+  header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 11, borderBottomWidth: 1 },
 
-  // Updated Cash In Styles
-  cashInMethodsContainer: {
-    marginTop: 10,
-  },
-  cashInMethodCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderLeftWidth: 4,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  selectedCashInMethodCard: {
-    backgroundColor: '#F8FAFC',
-    borderColor: '#8B5CF6',
-    shadowColor: '#8B5CF6',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  cashInMethodHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  cashInMethodInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  cashInMethodIcon: {
-    fontSize: 32,
-    marginRight: 12,
-  },
-  cashInMethodDetails: {
-    flex: 1,
-  },
-  cashInMethodName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    marginBottom: 4,
-  },
-  cashInMethodDescription: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  cashInMethodFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-    paddingTop: 12,
-  },
-  cashInMethodFee: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  cashInMethodTime: {
-    fontSize: 14,
-    color: '#10B981',
-    fontWeight: '500',
-  },
-  disabledButton: {
-    backgroundColor: '#9CA3AF',
-    opacity: 0.6,
-  },
+  // ── Logo mark ──
+  headerLeft:      { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  logoMark:        { width: 40, height: 40, position: 'relative', justifyContent: 'center', alignItems: 'center' },
+  logoImg:         { width: 40, height: 40, borderRadius: 14,
+                     shadowColor: '#EA580C', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6 },
+  logoMarkAccent:  { position: 'absolute', width: 10, height: 10, borderRadius: 5, bottom: -2, right: -2, borderWidth: 2 },
 
-  // Existing styles
-  grandTotalCard: {
-    backgroundColor: '#8B5CF6',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  grandTotalContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  grandTotalInfo: {
-    flex: 1,
-  },
-  grandTotalLabel: {
-    color: 'rgba(255, 255, 255, 0.9)',
-    fontSize: 14,
-  },
-  grandTotalAmount: {
-    color: 'white',
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginVertical: 8,
-  },
-  grandTotalDate: {
-    color: 'rgba(255, 255, 255, 0.75)',
-    fontSize: 12,
-  },
-  payNowButtonGrand: {
-    backgroundColor: 'white',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    marginLeft: 16,
-  },
-  payNowButtonTextGrand: {
-    color: '#8B5CF6',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 12,
-    backgroundColor: 'white',
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  appName: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#F97316',
-    marginLeft: 10,
-  },
-  logo: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-  },
-  notificationButton: {
-    padding: 8,
-    position: 'relative',
-  },
-  notificationDot: {
-    position: 'absolute',
-    top: 5,
-    right: 5,
-    width: 8,
-    height: 8,
-    backgroundColor: '#EF4444',
-    borderRadius: 4,
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 80,
-  },
-  tabSelector: {
-    flexDirection: 'row',
-    backgroundColor: '#EDE9FE',
-    borderRadius: 8,
-    padding: 4,
-    marginBottom: 16,
-  },
-  tabButton: {
-    flex: 1,
-    padding: 10,
-    borderRadius: 6,
-    alignItems: 'center',
-  },
-  activeTab: {
-    backgroundColor: 'white',
-    shadowColor: '#8B5CF6',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  tabButtonText: {
-    color: '#8B5CF6',
-    fontWeight: '500',
-  },
-  activeTabText: {
-    fontWeight: '600',
-  },
-  walletCard: {
-    backgroundColor: '#4F46E5',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  walletHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  walletTitle: {
-    color: 'rgba(255, 255, 255, 0.9)',
-    fontSize: 14,
-  },
-  walletAmount: {
-    color: 'white',
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginVertical: 8,
-  },
-  walletActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 12,
-  },
-  walletAction: {
-    alignItems: 'center',
-    padding: 8,
-    flex: 1,
-  },
-  walletActionText: {
-    color: 'white',
-    fontSize: 12,
-    marginTop: 4,
-  },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  card: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    width: (width - 40) / 2,
-    elevation: 1,
-  },
-  fullWidthCard: {
-    width: '100%',
-    marginBottom: 16,
-  },
-  cardTitle: {
-    color: '#4B5563',
-    fontSize: 14,
-    marginBottom: 8,
-  },
-  cardValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  dueDate: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  dueAmount: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#EF4444',
-  },
-  creditScoreContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  creditScore: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1F2937',
-  },
-  creditScoreLabel: {
-    color: '#10B981',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  loanApplicationCard: {
-    backgroundColor: '#F97316',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 24,
-  },
-  loanTitle: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  loanText: {
-    color: 'rgba(255, 255, 255, 0.9)',
-    fontSize: 14,
-    marginVertical: 8,
-  },
-  loanButtonsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 8,
-  },
-  applyButton: {
-    backgroundColor: 'white',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    flex: 1,
-    marginRight: 8,
-  },
-  applyButtonText: {
-    color: '#F97316',
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  howToLoanButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'white',
-  },
-  howToLoanButtonText: {
-    color: 'white',
-    fontWeight: '600',
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  seeAllText: {
-    color: '#8B5CF6',
-    fontSize: 14,
-  },
-  transactionList: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-  },
-  transactionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  transactionIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#EDE9FE',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  transactionIconText: {
-    fontSize: 18,
-  },
-  transactionDetails: {
-    flex: 1,
-  },
-  transactionType: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1F2937',
-  },
-  transactionDate: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  transactionAmountContainer: {
-    alignItems: 'flex-end',
-  },
-  transactionAmount: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  transactionStatus: {
-    fontSize: 12,
-    marginTop: 4,
-    fontWeight: '500',
-  },
-  statusCompleted: {
-    color: '#10B981',
-  },
-  statusPending: {
-    color: '#F59E0B',
-  },
-  bottomNav: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'white',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingVertical: 8,
-  },
-  navItem: {
-    alignItems: 'center',
-    paddingHorizontal: 8,
-  },
-  navIcon: {
-    marginBottom: 4,
-  },
-  navIconText: {
-    fontSize: 20,
-  },
-  navText: {
-    color: '#9CA3AF',
-    fontSize: 12,
-  },
-  navTextActive: {
-    color: '#8B5CF6',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  profileContent: {
-    padding: 20,
-    flexGrow: 1,
-  },
-  avatarContainer: {
-    alignItems: 'center',
-    marginBottom: 30,
-    marginTop: 20,
-  },
-  avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    marginBottom: 15,
-  },
-  emptyAvatar: {
-    backgroundColor: '#E5E7EB',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  name: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    marginBottom: 5,
-  },
-  email: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  detailsContainer: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 20,
-  },
-  detailItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  detailLabel: {
-    color: '#6B7280',
-    fontSize: 14,
-  },
-  detailValue: {
-    color: '#1F2937',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  activeStatus: {
-    color: '#10B981',
-  },
-  settingsButton: {
-    backgroundColor: '#E5E7EB',
-    padding: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  settingsButtonText: {
-    color: '#1F2937',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  logoutButton: {
-    backgroundColor: '#EF4444',
-    padding: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  logoutButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  backButton: {
-    fontSize: 24,
-    color: '#374151',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  // Modal Styles
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  modalHeaderActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 20,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  markAllText: {
-    color: '#8B5CF6',
-    fontWeight: '500',
-  },
-  notificationsList: {
-    flex: 1,
-    padding: 16,
-  },
-  notificationItem: {
-    backgroundColor: 'white',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  notificationContent: {
-    flex: 1,
-  },
-  unreadNotification: {
-    borderLeftWidth: 4,
-    borderLeftColor: '#8B5CF6',
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#8B5CF6',
-    marginLeft: 8,
-  },
-  notificationTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  notificationMessage: {
-    fontSize: 14,
-    color: '#4B5563',
-    marginBottom: 4,
-  },
-  notificationTime: {
-    fontSize: 12,
-    color: '#9CA3AF',
-  },
-  emptyNotifications: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
-  },
-  emptyText: {
-    marginTop: 16,
-    color: '#6B7280',
-    fontSize: 16,
-  },
-  // Wallet Modal Styles
-  centeredView: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  walletModal: {
-    width: '90%',
-    maxHeight: '80%',
-    backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 25,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  walletModalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 10,
-    color: '#1F2937',
-    textAlign: 'center',
-  },
-  walletBalance: {
-    fontSize: 14,
-    color: '#6B7280',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  inputContainer: {
-    marginBottom: 15,
-  },
-  inputLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
-    marginBottom: 5,
-  },
-  textInput: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    backgroundColor: '#F9FAFB',
-  },
-  bankList: {
-    maxHeight: 300,
-  },
-  bankOption: {
-    alignItems: 'center',
-    padding: 10,
-    marginRight: 10,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    minWidth: 80,
-  },
-  selectedBankOption: {
-    borderColor: '#8B5CF6',
-    backgroundColor: '#F3F0FF',
-  },
-  bankIcon: {
-    fontSize: 24,
-    marginBottom: 5,
-  },
-  bankName: {
-    fontSize: 12,
-    color: '#374151',
-  },
-  walletActionButtonPrimary: {
-    backgroundColor: '#8B5CF6',
-    padding: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  walletActionButtonPrimaryText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  closeButton: {
-    position: 'absolute',
-    top: 15,
-    right: 15,
-    zIndex: 1,
-  },
-  // QR Modal Styles
-  qrCodeContainer: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  qrCode: {
-    width: 150,
-    height: 150,
-    backgroundColor: '#F3F4F6',
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  merchantName: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#1F2937',
-  },
-  // Cash In Modal Styles
-  cashInMethods: {
-    maxHeight: 200,
-  },
-  cashInMethod: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 15,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    marginBottom: 10,
-  },
-  selectedCashInMethod: {
-    borderColor: '#8B5CF6',
-    backgroundColor: '#F3F0FF',
-  },
-  cashInMethodInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  cashInMethodIcon: {
-    fontSize: 20,
-    marginRight: 12,
-  },
-  cashInMethodName: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#1F2937',
-  },
-  cashInMethodFee: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  // Transaction History Modal Styles
-  transactionHistoryList: {
-    flex: 1,
-    padding: 16,
-  },
-  transactionHistoryItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  transactionHistoryIcon: {
-    marginRight: 12,
-    marginTop: 4,
-  },
-  transactionHistoryDetails: {
-    flex: 1,
-  },
-  transactionHistoryType: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1F2937',
-  },
-  transactionHistoryDate: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  transactionHistoryExtra: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  transactionHistoryAmountContainer: {
-    alignItems: 'flex-end',
-  },
-  transactionHistoryAmount: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  transactionHistoryStatus: {
-    fontSize: 12,
-    color: '#10B981',
-    marginTop: 4,
-  },
-  // Credit Score Modal Styles
-  creditScoreModal: {
-    width: '90%',
-    maxHeight: '80%',
-    backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 25,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  creditScoreModalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    color: '#1F2937',
-    textAlign: 'center',
-  },
-  creditBreakdownSection: {
-    marginBottom: 25,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 15,
-  },
-  creditFactor: {
-    marginBottom: 15,
-  },
-  creditFactorHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 5,
-  },
-  creditFactorTitle: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
-  },
-  creditFactorPercentage: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 3,
-  },
-  creditFactorStatus: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  benefitsSection: {
-    marginBottom: 25,
-  },
-  benefitText: {
-    fontSize: 14,
-    color: '#374151',
-    marginLeft: 10,
-    flex: 1,
-  },
-  actionButtonsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  secondaryButton: {
-    flex: 1,
-    backgroundColor: '#F3F4F6',
-    padding: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-  },
-  secondaryButtonText: {
-    color: '#374151',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  applyLoanButton: {
-    backgroundColor: '#8B5CF6',
-    padding: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  applyLoanButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-    // Loan Status Modal Styles
-  loanStatusModal: {
-    width: '90%',
-    backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 25,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  loanStatusHeader: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  loanStatusTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    marginTop: 10,
-  },
-  loanStatusText: {
-    fontSize: 14,
-    color: '#4B5563',
-    textAlign: 'center',
-    marginBottom: 15,
-    lineHeight: 20,
-  },
-  loanStatusSubtext: {
-    fontSize: 12,
-    color: '#6B7280',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  loanStatusDetails: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
-    padding: 15,
-    marginBottom: 20,
-  },
-  loanStatusDetailItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 5,
-  },
-  loanStatusDetailLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  loanStatusDetailValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1F2937',
-  },
-  loanStatusButton: {
-    backgroundColor: '#8B5CF6',
-    padding: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  loanStatusButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  // Wallet Actions Modal Styles
-  walletActionsModal: {
-    width: '90%',
-    backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 25,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  walletActionsTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    color: '#1F2937',
-    textAlign: 'center',
-  },
-  walletActionButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    flexWrap: 'wrap',
-  },
-  walletActionButton: {
-    alignItems: 'center',
-    padding: 20,
-    borderRadius: 12,
-    backgroundColor: '#F9FAFB',
-    width: '30%',
-    marginBottom: 15,
-  },
-  walletActionButtonText: {
-    fontSize: 12,
-    color: '#4B5563',
-    marginTop: 8,
-    fontWeight: '500',
-  },
-  // How to Loan Modal Styles
-  howToLoanModal: {
-    width: '95%',
-    height: '85%',
-    backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 25,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  howToLoanModalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    color: '#1F2937',
-    textAlign: 'center',
-  },
-  howToLoanContent: {
-    flex: 1,
-    marginBottom: 20,
-  },
-  featureSection: {
-    marginBottom: 20,
-    paddingBottom: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  featureTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 8,
-  },
-  featureDescription: {
-    fontSize: 14,
-    color: '#4B5563',
-    lineHeight: 20,
-  },
+  // ── Brand text ──
+  headerBrandBlock: { justifyContent: 'center', gap: 3 },
+  headerBrandRow:   { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  appName:          { fontSize: 20, fontWeight: '900', letterSpacing: -0.8 },
+  appBadge:         { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  appBadgeTxt:      { fontSize: 9, fontWeight: '800', letterSpacing: 0.4, textTransform: 'uppercase' },
+  headerTierPill:   { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 20, paddingHorizontal: 7, paddingVertical: 2, alignSelf: 'flex-start' },
+  headerTierDot:    { width: 5, height: 5, borderRadius: 3 },
+  headerTierTxt:    { fontSize: 10, fontWeight: '700' },
+
+  // ── Center greeting ──
+  headerCenter:    { flex: 1, paddingHorizontal: 12, alignItems: 'center' },
+  headerGreeting:  { fontSize: 10, fontWeight: '500', letterSpacing: 0.2 },
+  headerName:      { fontSize: 13, fontWeight: '700', marginTop: 1 },
+
+  // ── Right buttons ──
+  headerRight:     { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  hIconBtn:        { width: 36, height: 36, borderRadius: 12, justifyContent: 'center', alignItems: 'center', position: 'relative' },
+  notifBadge:      { position: 'absolute', top: 4, right: 4, minWidth: 16, height: 16, borderRadius: 8,
+                     backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 3 },
+  notifBadgeTxt:   { color: 'white', fontSize: 8, fontWeight: '800' },
+  headerAvatar:    { position: 'relative', marginLeft: 2 },
+  headerAvatarInner:{ width: 36, height: 36, borderRadius: 12, justifyContent: 'center', alignItems: 'center',
+                      shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 3 },
+  headerAvatarTxt: { color: 'white', fontSize: 12, fontWeight: '800', letterSpacing: 0.5 },
+  headerAvatarStatus:{ position: 'absolute', width: 10, height: 10, borderRadius: 5, bottom: -1, right: -1, borderWidth: 2 },
+
+  // ── Legacy kept for notif dot if referenced elsewhere ──
+  hBtn:     { padding: 8, position: 'relative' },
+  notifDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#EF4444', position: 'absolute', top: 6, right: 6 },
+  logo:     { width: 32, height: 32, borderRadius: 16 },
+
+  walletCard:        { margin: 16, borderRadius: 22, backgroundColor: '#FB923C', padding: 20, shadowColor: '#FB923C', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 18, elevation: 10 },
+  walletTop:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 },
+  walletLabel:       { color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: '600', letterSpacing: 0.5 },
+  walletClock:       { color: 'rgba(255,255,255,0.55)', fontSize: 9, marginTop: 2 },
+  walletAmt:         { color: 'white', fontSize: 30, fontWeight: '800', marginBottom: 10, letterSpacing: 0.5 },
+  walletStats:       { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 20 },
+  walletStatTxt:     { color: 'rgba(255,255,255,0.85)', fontSize: 11, fontWeight: '500' },
+  walletStatSep:     { width: 1, height: 12, backgroundColor: 'rgba(255,255,255,0.3)' },
+  walletActions:     { flexDirection: 'row', justifyContent: 'space-between' },
+  walletActionBtn:   { alignItems: 'center', width: '23%' },
+  walletActionIcon:  { width: 46, height: 46, borderRadius: 23, backgroundColor: 'white', justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
+  walletActionLabel: { color: 'rgba(255,255,255,0.9)', fontSize: 11, fontWeight: '500', textAlign: 'center' },
+
+  cardRow:       { flexDirection: 'row', paddingHorizontal: 16, gap: 12, marginBottom: 12 },
+  smallCard:     { flex: 1, borderRadius: 16, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+  smallCardLabel:{ fontSize: 11, fontWeight: '500', marginBottom: 4 },
+  smallCardDate: { fontSize: 13, fontWeight: '600', marginBottom: 2 },
+  smallCardValue:{ fontSize: 17, fontWeight: '800' },
+  smallCardSub:  { fontSize: 11, fontWeight: '600', marginTop: 3 },
+
+  creditCard:      { marginHorizontal: 16, marginBottom: 12, borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+  arcWrap:         { width: 86, height: 86, position: 'relative', justifyContent: 'center', alignItems: 'center' },
+  arcSeg:          { position: 'absolute', width: 86, height: 86, borderRadius: 43, borderWidth: 8, borderTopColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: 'transparent', borderLeftColor: 'transparent' },
+  arcInner:        { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 3, elevation: 2 },
+  arcScore:        { fontSize: 16, fontWeight: '800' },
+  arcTier:         { fontSize: 8, fontWeight: '700' },
+  arcOf:           { fontSize: 8 },
+  creditTierBadge: { fontSize: 12, fontWeight: '700', marginTop: 4 },
+  creditPts:       { fontSize: 11, marginTop: 2 },
+  creditTap:       { fontSize: 11, marginTop: 4 },
+
+  loanCard:        { marginHorizontal: 16, marginBottom: 12, borderRadius: 16, padding: 20, borderWidth: 1 },
+  loanTitle:       { fontSize: 18, fontWeight: '800', marginBottom: 4 },
+  loanSub:         { fontSize: 13, marginBottom: 16 },
+  loanBtns:        { flexDirection: 'row', gap: 10 },
+  loanApplyBtn:    { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: '#FB923C', paddingVertical: 12, borderRadius: 10 },
+  loanApplyBtnTxt: { color: 'white', fontWeight: '700', fontSize: 13 },
+  loanHowBtn:      { paddingHorizontal: 14, paddingVertical: 12, borderRadius: 10, borderWidth: 1 },
+  loanHowBtnTxt:   { fontWeight: '700', fontSize: 13 },
+
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, marginBottom: 10 },
+  sectionTitle:  { fontSize: 15, fontWeight: '700' },
+  seeAll:        { fontSize: 13, fontWeight: '600' },
+  txList:        { marginHorizontal: 16, borderRadius: 16, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+  txRow:         { flexDirection: 'row', alignItems: 'center', padding: 13, borderBottomWidth: 1 },
+  txIcon:        { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: 11 },
+  txMid:         { flex: 1 },
+  txType:        { fontSize: 13, fontWeight: '600' },
+  txDate:        { fontSize: 11, marginTop: 2 },
+  txRight:       { alignItems: 'flex-end' },
+  txAmt:         { fontSize: 13, fontWeight: '700' },
+  txPill:        { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, marginTop: 3 },
+  txStatus:      { fontSize: 10, fontWeight: '600' },
+
+  bottomNav: { flexDirection: 'row', borderTopWidth: 1, paddingBottom: 8, paddingTop: 8, position: 'absolute', bottom: 0, left: 0, right: 0 },
+  navItem:   { flex: 1, alignItems: 'center', paddingVertical: 2 },
+  navEmoji:  { fontSize: 20, marginBottom: 2 },
+  navLabel:  { fontSize: 10 },
+
+  overlay:    { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.55)' },
+  sheet:      { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 36 },
+  sheetClose: { alignSelf: 'flex-end', padding: 4, marginBottom: 6 },
+  sheetTitle: { fontSize: 19, fontWeight: '800', marginBottom: 16, textAlign: 'center' },
+  fullModal:       { flex: 1 },
+  fullModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1 },
+  fullModalTitle:  { fontSize: 17, fontWeight: '700' },
+
+  confirmBox: { borderRadius: 12, padding: 14, marginBottom: 14 },
+  confirmRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 1 },
+  confirmKey: { fontSize: 13 },
+  confirmVal: { fontSize: 13, fontWeight: '600' },
+
+  rowBtns:        { flexDirection: 'row', gap: 10, marginTop: 14 },
+  primaryBtn:     { flex: 1, backgroundColor: '#FB923C', padding: 14, borderRadius: 11, alignItems: 'center' },
+  primaryBtnTxt:  { color: 'white', fontWeight: '700', fontSize: 15 },
+  secondaryBtn:   { flex: 1, padding: 14, borderRadius: 11, alignItems: 'center' },
+  secondaryBtnTxt:{ fontWeight: '600', fontSize: 15 },
+  disabledBtn:    { backgroundColor: '#FED7AA' },
+
+  histSum:     { flexDirection: 'row', padding: 16, borderBottomWidth: 1 },
+  histSumItem: { flex: 1, alignItems: 'center' },
+  histSumVal:  { fontSize: 15, fontWeight: '800', marginBottom: 3 },
+  histSumLbl:  { fontSize: 11 },
+  histCard:    { borderRadius: 12, marginBottom: 8, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
+
+  notifRow:   { flexDirection: 'row', padding: 14, borderBottomWidth: 1 },
+  notifIcon:  { width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  notifTitle: { fontSize: 13, fontWeight: '700', flex: 1 },
+  unreadDot:  { width: 8, height: 8, borderRadius: 4 },
+  notifMsg:   { fontSize: 12, lineHeight: 17, marginTop: 2 },
+  notifTime:  { fontSize: 11, marginTop: 3 },
+
+  scoreCircleWrap:  { alignItems: 'center', marginBottom: 16 },
+  scoreCircleOuter: { width: 150, height: 150, borderRadius: 75, justifyContent: 'center', alignItems: 'center', position: 'relative' },
+  scoreArc:         { position: 'absolute', width: 150, height: 150, borderRadius: 75, borderWidth: 11, borderTopColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: 'transparent', borderLeftColor: 'transparent' },
+  scoreInner:       { width: 112, height: 112, borderRadius: 56, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2 },
+  scoreNum:  { fontSize: 26, fontWeight: '800' },
+  scoreTier: { fontSize: 12, fontWeight: '700', marginTop: 2 },
+  scoreOf:   { fontSize: 11, marginTop: 1 },
+  tierLadder:        { borderRadius: 12, padding: 14, marginBottom: 14 },
+  tierTitle:         { fontSize: 13, fontWeight: '700', marginBottom: 8 },
+  tierRow:           { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 7, borderBottomWidth: 1 },
+  tierRange:         { fontSize: 13, flex: 1 },
+  tierLoan:          { fontSize: 13, fontWeight: '600', marginRight: 6 },
+  tierHint:          { fontSize: 11, marginTop: 6, fontStyle: 'italic' },
+  scoreFactorsTitle: { fontSize: 14, fontWeight: '700', marginBottom: 10 },
+
+  settingCard:       { borderRadius: 14, marginBottom: 14, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 1 },
+  settingGroupTitle: { fontSize: 11, fontWeight: '700', letterSpacing: 1, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 6 },
+  settingRow:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1 },
+  settingLeft:       { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  settingLabel:      { fontSize: 14, fontWeight: '600' },
+  settingSub:        { fontSize: 12, marginTop: 1 },
+  logoutBtn:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1.5, borderRadius: 12, padding: 14, marginTop: 8 },
+  logoutBtnTxt:      { fontWeight: '700', fontSize: 15 },
+
+  howStep:   { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 16 },
+  howNum:    { width: 30, height: 30, borderRadius: 15, justifyContent: 'center', alignItems: 'center' },
+  howNumTxt: { color: 'white', fontWeight: '800', fontSize: 14 },
+  howTitle:  { fontSize: 14, fontWeight: '700', marginBottom: 3 },
+  howDesc:   { fontSize: 13, lineHeight: 18 },
 });
 
 export default DashboardScreen;

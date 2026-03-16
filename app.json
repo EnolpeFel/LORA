@@ -1,16 +1,24 @@
 {
   "expo": {
-    "name": "Your App",
+
+    
+    "name": "LORA",
     "slug": "your-app",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "assetBundlePatterns": [
       "**/*"
     ],
     "android": {
       "package": "com.yourcompany.yourapp",
       "versionCode": 3,
-      "permissions": []
+      "permissions": [],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFFFFF",
+        "monochromeImage": "./assets/monochrome-icon.png" 
+      }
     },
     "extra": {
       "eas": {
@@ -20,7 +28,8 @@
     "owner": "feldave",
     "plugins": [
       "expo-asset",
-      "expo-font"
+      "expo-font",
+      "expo-secure-store"
     ]
   }
 }

@@ -1,1694 +1,978 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
-  Dimensions,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-  Modal,
-  Alert,
-  Image
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  Modal, TextInput, Alert, ActivityIndicator, Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
+import LoanStore from './Loanstore.js';
 
-const { width, height } = Dimensions.get('window');
+// ─── Constants ────────────────────────────────────────────────────────────────
+const PURPLE = '#8B5CF6';
+const ORANGE = '#F97316';
+const RED    = '#DC2626';
+const GREEN  = '#10B981';
+const AMBER  = '#F59E0B';
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const fmt = (n) => {
+  const num = typeof n === 'string' ? parseFloat(n.replace(/[^0-9.]/g, '')) : Number(n);
+  return `₱${(isNaN(num) ? 0 : num).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
+
+const safeStr = (v) => (v !== null && v !== undefined ? String(v) : '—');
+
+const getLoanIcon = (type = '') => {
+  const t = type.toLowerCase();
+  if (t.includes('home'))      return 'home';
+  if (t.includes('emergency')) return 'flash-on';
+  if (t.includes('business'))  return 'business-center';
+  if (t.includes('education')) return 'school';
+  return 'person';
+};
+
+// ─── Payment Methods ──────────────────────────────────────────────────────────
+const METHODS = [
+  { id: 'wallet',    name: 'Lora Wallet', icon: 'account-balance-wallet', cat: 'wallet',  fee: 0,  color: PURPLE,    desc: 'Instant · No fees' },
+  { id: 'gcash',     name: 'GCash',       icon: 'smartphone',             cat: 'ewallet', fee: 0,  color: '#007DFF', desc: 'Instant · No fees' },
+  { id: 'maya',      name: 'Maya',        icon: 'smartphone',             cat: 'ewallet', fee: 0,  color: '#00B14F', desc: 'Instant · No fees' },
+  { id: 'bpi',       name: 'BPI',         icon: 'account-balance',        cat: 'bank',    fee: 15, color: '#C40B2C', desc: '1–3 business days' },
+  { id: 'bdo',       name: 'BDO',         icon: 'account-balance',        cat: 'bank',    fee: 15, color: '#9E0B0F', desc: '1–3 business days' },
+  { id: 'metrobank', name: 'Metrobank',   icon: 'account-balance',        cat: 'bank',    fee: 15, color: '#0F4B9C', desc: '1–3 business days' },
+  { id: 'landbank',  name: 'Landbank',    icon: 'account-balance',        cat: 'bank',    fee: 15, color: '#0055A5', desc: '1–3 business days' },
+  { id: 'unionbank', name: 'UnionBank',   icon: 'account-balance',        cat: 'bank',    fee: 10, color: '#FF6B00', desc: 'Instant' },
+  { id: 'visa',      name: 'Visa Card',   icon: 'credit-card',            cat: 'card',    fee: 25, color: '#1A1F71', desc: 'Instant · 1.6% fee' },
+  { id: 'mastercard',name: 'Mastercard',  icon: 'credit-card',            cat: 'card',    fee: 25, color: '#EB001B', desc: 'Instant · 1.6% fee' },
+];
+const CAT_LABELS = { wallet: 'Wallet', ewallet: 'E-Wallet', bank: 'Bank Transfer', card: 'Card' };
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 const PayNowScreen = ({ navigation, route }) => {
-  const [showConfirmationModal, setShowConfirmationModal] = useState(false);
-  const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
-  const [loanDetails, setLoanDetails] = useState(null);
-  const [showReceiptDetails, setShowReceiptDetails] = useState(false);
-  const [newTransaction, setNewTransaction] = useState(null);
+  const transactions = route.params?.transactions || [];
 
-  // Get loan application data and billing info from navigation params
-  const { loanApplication, transactions = [], billingInfo } = route.params || {};
+  const [showDetails,     setShowDetails]     = useState(false);
+  const [showMethodModal, setShowMethodModal] = useState(false);
+  const [newTx,           setNewTx]           = useState(null);
+  const [showSuccess,     setShowSuccess]     = useState(false);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  const loan = useMemo(() => {
+    const la = route.params?.loanApplication;
+    const bi = route.params?.billingInfo;
+
+    if (!la || !bi) return null;
+
+    const pc = Number(la.paymentsCompleted) || 0;
+    const pr = Number(la.paymentsRemaining) || 0;
+    const pt = Number(la.paymentsTotal) || (pc + pr) || Number(la.loanTerm) || 0;
+
+    return {
+      id:               safeStr(la.id),
+      type:             safeStr(la.type || 'Personal Loan'),
+      purpose:          safeStr(la.purpose || ''),
+      lender:           safeStr(la.lender || '—'),
+      status:           safeStr(la.status || 'Active'),
+      dueDate:          safeStr(la.nextDueDate || la.dueDate || '—'),
+      term:             safeStr(la.terms || la.term || '—'),
+      applicationDate:  safeStr(la.applicationDate || ''),
+      disbursementDate: safeStr(la.disbursementDate || ''),
+      loanAmount:       Number(la.loanAmount)       || 0,
+      remainingBalance: Number(la.remainingBalance) || 0,
+      interestRate:     Number(la.interestRate)     || 0,
+      interestType:     safeStr(la.interestType     || 'Fixed'),
+      monthlyPayment:   Number(la.monthlyPayment)   || 0,
+      totalInterest:    Number(la.totalInterest)    || 0,
+      processingFee:    Number(la.processingFee)    || 0,
+      netRelease:       Number(la.netRelease)       || 0,
+      paidAmount:       Number(la.paidAmount)       || 0,
+      paymentsCompleted: pc,
+      paymentsRemaining: pr,
+      paymentsTotal:    pt,
+      progress:         pt > 0 ? Math.round((pc / pt) * 100) : 0,
+      base:      Number(bi.basePayment)     || 0,
+      principal: Number(bi.principalAmount) || 0,
+      interest:  Number(bi.interestAmount)  || 0,
+      lateFees:  Number(bi.lateFees)        || 0,
+      daysLate:  Number(bi.daysLate)        || 0,
+      total:     Number(bi.totalAmountDue)  || 0,
+      isProcessing: la.status === 'Processing' || la.status === 'Pending',
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route.params]);
 
   useEffect(() => {
-    if (loanApplication && billingInfo) {
-      const details = {
-        applicationId: loanApplication.id || 'N/A',
-        amount: loanApplication.amount || 'N/A',
-        term: loanApplication.terms || 'N/A',
-        lender: loanApplication.lender || 'N/A',
-        status: loanApplication.status || 'Active',
-        loanType: loanApplication.type || 'Personal Loan',
-        monthlyIncome: loanApplication.monthlyIncome || 'N/A',
-        collateral: loanApplication.collateral || 'N/A',
-        
-        basePayment: billingInfo.basePayment || 1500,
-        principalAmount: billingInfo.principalAmount || 1200,
-        interestAmount: billingInfo.interestAmount || 300,
-        lateFees: billingInfo.lateFees || 0,
-        totalAmountDue: billingInfo.totalAmountDue || 1500,
-        daysLate: billingInfo.daysLate || 0,
-        
-        dueDate: loanApplication.nextDueDate || loanApplication.dueDate || '2024-01-15',
-        isProcessing: false,
-        applicationDate: loanApplication.date || loanApplication.loanStartDate || '2024-01-01',
-        
-        loanAmount: loanApplication.loanAmount || 50000,
-        remainingBalance: loanApplication.remainingBalance || 45000,
-        interestRate: loanApplication.interestRate || '12.5',
-        interestType: loanApplication.interestType || 'Fixed',
-        totalInterest: loanApplication.totalInterest || 7500,
-        processingFee: loanApplication.processingFee || 500,
-        totalPayment: loanApplication.totalPayment || 57500,
-        netRelease: loanApplication.netRelease || 49500,
-        paymentsCompleted: loanApplication.paymentsCompleted || 1,
-        paymentsRemaining: loanApplication.paymentsRemaining || 35,
-      };
-      setLoanDetails(details);
-    } else if (loanApplication) {
-      const isProcessingStatus = loanApplication.status === 'Processing' || loanApplication.status === 'Pending';
-      
-      if (isProcessingStatus) {
-        setLoanDetails({
-          applicationId: loanApplication.id || 'N/A',
-          amount: loanApplication.amount || 'N/A',
-          term: loanApplication.terms || 'N/A',
-          lender: loanApplication.lender || 'N/A',
-          status: loanApplication.status || 'Processing',
-          loanType: loanApplication.type || 'N/A',
-          totalAmountDue: 0,
-          dueDate: 'To be determined',
-          isProcessing: true,
-        });
-      }
-    } else {
-      // Default data for testing
-      setLoanDetails({
-        applicationId: 'LN-2024-001',
-        amount: '50,000',
-        term: '36 months',
-        lender: 'Lora Finance',
-        status: 'Active',
-        loanType: 'Personal Loan',
-        basePayment: 1500,
-        principalAmount: 1200,
-        interestAmount: 300,
-        lateFees: 0,
-        totalAmountDue: 1500,
-        daysLate: 0,
-        dueDate: '2024-01-15',
-        isProcessing: false,
-        applicationDate: '2024-01-01',
-        loanAmount: 50000,
-        remainingBalance: 45000,
-        interestRate: '12.5',
-        interestType: 'Fixed',
-        totalInterest: 7500,
-        processingFee: 500,
-        totalPayment: 57500,
-        netRelease: 49500,
-        paymentsCompleted: 1,
-        paymentsRemaining: 35,
-      });
-    }
-  }, [loanApplication, billingInfo]);
+    if (!loan || loan.daysLate <= 0) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.025, duration: 700, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1,     duration: 700, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [loan]);
 
-  // Check if returning from payment method screen with new transaction
-  useEffect(() => {
-    if (route.params?.newTransaction) {
-      setNewTransaction(route.params.newTransaction);
-      setShowConfirmationModal(true);
-    }
-  }, [route.params?.newTransaction]);
-
-  const handlePayNow = () => {
-    if (loanDetails.isProcessing) {
-      Alert.alert(
-        'Loan Still Processing',
-        'Your loan application is still being processed. Payment will be available once your loan is approved and active.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-
-    // Show payment method modal instead of navigating
-    setShowPaymentMethodModal(true);
-  };
-
-  const handlePaymentComplete = (transaction) => {
-    setNewTransaction(transaction);
-    setShowPaymentMethodModal(false);
-    setShowConfirmationModal(true);
-  };
-
-  const goBackToDashboard = () => {
-    setShowConfirmationModal(false);
-    
-    // Navigate back with updated transaction data
-    const updatedTransactions = newTransaction ? [newTransaction, ...transactions] : transactions;
-    
-    navigation.navigate('Dashboard', { 
-      newTransaction: newTransaction,
-      updatedTransactions: updatedTransactions
-    });
-  };
+  const goBack = () => navigation.goBack();
 
   const goToDashboard = () => {
-    navigation.goBack();
-  };
-
-  // Function to navigate to transactions
-  const goToTransactions = () => {
-    const updatedTransactions = newTransaction ? [newTransaction, ...transactions] : transactions;
-    navigation.navigate('Transactions', { 
-      transactions: updatedTransactions 
+    setShowSuccess(false);
+    navigation.navigate('Dashboard', {
+      newTransaction: newTx,
+      updatedTransactions: newTx ? [newTx, ...transactions] : transactions,
     });
   };
 
-  // Show loading while processing loan application data
-  if (!loanDetails) {
+  const handlePaymentComplete = (tx) => {
+    setNewTx(tx);
+    setShowMethodModal(false);
+    setShowSuccess(true);
+  };
+
+  if (!loan) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={goToDashboard}>
+      <SafeAreaView style={s.root}>
+        <View style={[s.header, { backgroundColor: PURPLE }]}>
+          <TouchableOpacity onPress={goBack} style={s.headerBtn}>
             <MaterialIcons name="arrow-back" size={24} color="white" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Pay for Loan</Text>
-          <TouchableOpacity>
-            <MaterialIcons name="info-outline" size={24} color="white" />
-          </TouchableOpacity>
+          <Text style={s.headerTitle}>Pay Loan</Text>
+          <View style={{ width: 40 }} />
         </View>
-        <View style={styles.loadingContainer}>
-          <MaterialIcons name="hourglass-empty" size={40} color="#8B5CF6" />
-          <Text style={styles.loadingText}>Loading billing details...</Text>
+        <View style={s.loading}>
+          <ActivityIndicator size="large" color={PURPLE} />
+          <Text style={s.loadingTxt}>Loading billing details…</Text>
         </View>
       </SafeAreaView>
     );
   }
 
+  const isOverdue   = loan.daysLate > 0;
+  const isUrgent    = isOverdue || loan.lateFees > 0;
+  const accentColor = isOverdue ? RED : isUrgent ? ORANGE : PURPLE;
+  const progress    = loan.paymentsTotal > 0 ? (loan.paymentsCompleted / loan.paymentsTotal) * 100 : 0;
+
+  const statusCfg = ({
+    Active:     { bg: '#ECFDF5', dot: GREEN,      text: '#059669' },
+    Processing: { bg: '#FFF7ED', dot: AMBER,      text: '#D97706' },
+    Pending:    { bg: '#FFF7ED', dot: AMBER,      text: '#D97706' },
+    Paid:       { bg: '#EFF6FF', dot: '#3B82F6',  text: '#1D4ED8' },
+  }[loan.status]) || { bg: '#F3F4F6', dot: '#9CA3AF', text: '#6B7280' };
+
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={s.root} edges={['top']}>
+
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={goToDashboard}>
+      <View style={[s.header, { backgroundColor: accentColor }]}>
+        <TouchableOpacity onPress={goBack} style={s.headerBtn}>
           <MaterialIcons name="arrow-back" size={24} color="white" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Pay for Loan</Text>
-        <TouchableOpacity onPress={goToTransactions}>
-          <MaterialIcons name="receipt" size={24} color="white" />
+        <View style={s.headerCenter}>
+          <Text style={s.headerTitle}>Pay Loan</Text>
+          <Text style={s.headerSub}>{loan.id}</Text>
+        </View>
+        <TouchableOpacity onPress={() => setShowDetails(v => !v)} style={s.headerBtn}>
+          <MaterialIcons name={showDetails ? 'keyboard-arrow-up' : 'info-outline'} size={24} color="white" />
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Receipt Section */}
-        <View style={styles.receiptSection}>
-          <View style={styles.receiptHeader}>
-            <View style={styles.receiptTitleContainer}>
-              <MaterialIcons name="receipt" size={24} color="#8B5CF6" />
-              <Text style={styles.receiptTitle}>Payment Details</Text>
-              <View style={styles.statusBadge}>
-                <MaterialIcons
-                  name="check-circle"
-                  size={16}
-                  color="#10B981"
-                />
-                <Text style={[styles.statusText, { color: '#10B981' }]}>
-                  {loanDetails.status}
-                </Text>
+      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+
+        {/* Processing banner */}
+        {loan.isProcessing && (
+          <View style={s.processingBanner}>
+            <View style={s.processingIconWrap}>
+              <MaterialIcons name="hourglass-empty" size={22} color={AMBER} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.processingTitle}>Application Under Review</Text>
+              <Text style={s.processingMsg}>
+                {`${loan.lender} is reviewing your ${loan.type} application. Payment will be available once approved.`}
+              </Text>
+              {!!loan.applicationDate && (
+                <Text style={s.processingDate}>{`Applied: ${loan.applicationDate}`}</Text>
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* Urgent banner */}
+        {isUrgent && !loan.isProcessing && (
+          <View style={[s.urgentBanner, isOverdue ? s.urgentRed : s.urgentOrange]}>
+            <MaterialIcons name={isOverdue ? 'error' : 'warning'} size={20} color={isOverdue ? RED : ORANGE} />
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <Text style={[s.urgentTitle, { color: isOverdue ? '#7F1D1D' : '#78350F' }]}>
+                {isOverdue ? `${loan.daysLate} Day${loan.daysLate !== 1 ? 's' : ''} Overdue` : 'Payment Due Soon'}
+              </Text>
+              <Text style={[s.urgentMsg, { color: isOverdue ? '#991B1B' : '#92400E' }]}>
+                {isOverdue ? `A late fee of ${fmt(loan.lateFees)} has been applied.` : 'Pay today to avoid late fees.'}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Amount Hero Card */}
+        {!loan.isProcessing && (
+          <Animated.View style={[s.amountCard, { backgroundColor: accentColor }, { transform: [{ scale: pulseAnim }] }]}>
+            <View style={s.amountCardTop}>
+              <View style={s.loanChip}>
+                <MaterialIcons name={getLoanIcon(loan.type)} size={12} color="white" />
+                <Text style={s.loanChipTxt}>{loan.type}</Text>
               </View>
+              <Text style={s.amountLender}>{loan.lender}</Text>
             </View>
 
-            <TouchableOpacity
-              style={styles.toggleButton}
-              onPress={() => setShowReceiptDetails(!showReceiptDetails)}
-            >
-              <MaterialIcons
-                name={showReceiptDetails ? 'keyboard-arrow-up' : 'keyboard-arrow-down'}
-                size={20}
-                color="#6B7280"
-              />
-            </TouchableOpacity>
+            <Text style={s.amountLbl}>Amount Due This Month</Text>
+            <Text style={s.amountBig}>{fmt(loan.total)}</Text>
+            <Text style={s.dueDateTxt}>{`Due: ${loan.dueDate}`}</Text>
+
+            {loan.lateFees > 0 && (
+              <View style={s.lateFeeChip}>
+                <MaterialIcons name="warning" size={11} color="#FEF2F2" />
+                <Text style={s.lateFeeChipTxt}>{`Includes ${fmt(loan.lateFees)} late fee`}</Text>
+              </View>
+            )}
+
+            <View style={s.strip}>
+              <View style={s.stripItem}>
+                <Text style={s.stripLbl}>Principal</Text>
+                <Text style={s.stripVal}>{fmt(loan.principal)}</Text>
+              </View>
+              <View style={s.stripDivider} />
+              <View style={s.stripItem}>
+                <Text style={s.stripLbl}>Interest</Text>
+                <Text style={[s.stripVal, { color: '#FDE68A' }]}>{fmt(loan.interest)}</Text>
+              </View>
+              {loan.lateFees > 0 && (
+                <>
+                  <View style={s.stripDivider} />
+                  <View style={s.stripItem}>
+                    <Text style={s.stripLbl}>Late Fee</Text>
+                    <Text style={[s.stripVal, { color: '#FCA5A5' }]}>{fmt(loan.lateFees)}</Text>
+                  </View>
+                </>
+              )}
+            </View>
+          </Animated.View>
+        )}
+
+        {/* Loan Info Card */}
+        <View style={s.infoCard}>
+          <View style={s.infoHeader}>
+            <View style={[s.loanIconWrap, { backgroundColor: `${accentColor}15` }]}>
+              <MaterialIcons name={getLoanIcon(loan.type)} size={20} color={accentColor} />
+            </View>
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={s.infoId}>{`Loan #${loan.id}`}</Text>
+              <Text style={s.infoLender}>{loan.lender}</Text>
+              {!!loan.purpose && <Text style={s.infoPurpose}>{loan.purpose}</Text>}
+            </View>
+            <View style={[s.statusPill, { backgroundColor: statusCfg.bg }]}>
+              <View style={[s.statusDot, { backgroundColor: statusCfg.dot }]} />
+              <Text style={[s.statusTxt, { color: statusCfg.text }]}>{loan.status}</Text>
+            </View>
           </View>
 
-          <View style={styles.receiptSummary}>
-            <Text style={styles.receiptNumber}>Loan #{loanDetails.applicationId}</Text>
-            <Text style={styles.receiptDate}>
-              Due on {loanDetails.dueDate}
+          {loan.paymentsTotal > 0 && (
+            <View style={s.progressSection}>
+              <View style={s.progressTopRow}>
+                <Text style={s.progressNote}>{`${loan.paymentsCompleted} of ${loan.paymentsTotal} payments`}</Text>
+                <Text style={[s.progressPct, { color: accentColor }]}>{`${loan.progress}%`}</Text>
+              </View>
+              <View style={s.track}>
+                <View style={[s.trackFill, { width: `${Math.min(100, progress)}%`, backgroundColor: accentColor }]} />
+              </View>
+              <View style={s.progressBottomRow}>
+                <Text style={s.progressNote}>{`${loan.paymentsRemaining} remaining`}</Text>
+                {!!loan.term && <Text style={s.progressNote}>{loan.term}</Text>}
+              </View>
+            </View>
+          )}
+
+          {!loan.isProcessing && (
+            <View style={s.statsRow}>
+              <View style={s.statItem}>
+                <Text style={[s.statVal, { color: '#1F2937' }]}>{fmt(loan.monthlyPayment || loan.base)}</Text>
+                <Text style={s.statLbl}>Monthly</Text>
+              </View>
+              <View style={[s.statItem, s.statBorder]}>
+                <Text style={[s.statVal, { color: AMBER }]}>{`${loan.interestRate}%`}</Text>
+                <Text style={s.statLbl}>Interest</Text>
+              </View>
+              <View style={[s.statItem, s.statBorder]}>
+                <Text style={[s.statVal, { color: accentColor }]}>{fmt(loan.remainingBalance)}</Text>
+                <Text style={s.statLbl}>Balance</Text>
+              </View>
+            </View>
+          )}
+
+          <TouchableOpacity style={s.expandBtn} onPress={() => setShowDetails(v => !v)}>
+            <Text style={[s.expandBtnTxt, { color: accentColor }]}>
+              {showDetails ? 'Hide loan details ↑' : 'View full loan details ↓'}
             </Text>
-          </View>
+          </TouchableOpacity>
 
-          {showReceiptDetails && (
-            <View style={styles.receiptDetails}>
-              <View style={styles.receiptDivider} />
+          {showDetails && (
+            <View style={s.detailsBox}>
 
-              {/* Loan Information */}
-              <View style={styles.receiptSection}>
-                <Text style={styles.receiptSectionTitle}>Loan Information</Text>
-                <View style={styles.receiptDetailRow}>
-                  <Text style={styles.receiptDetailLabel}>Loan ID:</Text>
-                  <Text style={styles.receiptDetailValue}>{loanDetails.applicationId}</Text>
+              <Text style={s.detailSectionLbl}>Loan Information</Text>
+              {[
+                ['Loan Type',         loan.type],
+                ['Purpose',           loan.purpose],
+                ['Lender',            loan.lender],
+                ['Interest Type',     loan.interestType],
+                ['Loan Term',         loan.term],
+                ['Application Date',  loan.applicationDate],
+                ['Disbursement Date', loan.disbursementDate],
+              ].filter(([, v]) => v).map(([k, v]) => (
+                <View key={k} style={s.detailRow}>
+                  <Text style={s.detailKey}>{k}</Text>
+                  <Text style={s.detailVal}>{safeStr(v)}</Text>
                 </View>
-                <View style={styles.receiptDetailRow}>
-                  <Text style={styles.receiptDetailLabel}>Loan Type:</Text>
-                  <Text style={styles.receiptDetailValue}>{loanDetails.loanType}</Text>
-                </View>
-                <View style={styles.receiptDetailRow}>
-                  <Text style={styles.receiptDetailLabel}>Lender:</Text>
-                  <Text style={styles.receiptDetailValue}>{loanDetails.lender}</Text>
-                </View>
-                <View style={styles.receiptDetailRow}>
-                  <Text style={styles.receiptDetailLabel}>Remaining Balance:</Text>
-                  <Text style={styles.receiptDetailValueAmount}>
-                    ₱{loanDetails.remainingBalance?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </Text>
-                </View>
-              </View>
+              ))}
 
-              <View style={styles.receiptDivider} />
+              <Text style={[s.detailSectionLbl, { marginTop: 12 }]}>Financial Breakdown</Text>
+              {[
+                ['Loan Amount',          fmt(loan.loanAmount),       null],
+                ['Total Interest',       fmt(loan.totalInterest),     AMBER],
+                ['Processing Fee',       fmt(loan.processingFee),     RED],
+                ['Net Amount Released',  fmt(loan.netRelease),        accentColor],
+                ['Remaining Balance',    fmt(loan.remainingBalance),  accentColor],
+              ].filter(([, v]) => v && v !== '₱0.00').map(([k, v, color]) => (
+                <View key={k} style={s.detailRow}>
+                  <Text style={s.detailKey}>{k}</Text>
+                  <Text style={[s.detailVal, color ? { color, fontWeight: '700' } : null]}>{v}</Text>
+                </View>
+              ))}
 
-              {/* Payment Progress */}
-              <View style={styles.receiptSection}>
-                <Text style={styles.receiptSectionTitle}>Payment Progress</Text>
-                <View style={styles.receiptDetailRow}>
-                  <Text style={styles.receiptDetailLabel}>Payments Completed:</Text>
-                  <Text style={styles.receiptDetailValue}>{loanDetails.paymentsCompleted}</Text>
+              <Text style={[s.detailSectionLbl, { marginTop: 12 }]}>Current Billing Cycle</Text>
+              {([
+                ['Due Date',      loan.dueDate,      AMBER],
+                ['Base Payment',  fmt(loan.base),    null],
+                ['Principal',     fmt(loan.principal),null],
+                ['Interest',      fmt(loan.interest), AMBER],
+                loan.lateFees > 0 ? [`Late Fee (${loan.daysLate} days)`, fmt(loan.lateFees), RED] : null,
+                ['Total Due',     fmt(loan.total),   accentColor],
+              ]).filter(Boolean).map(([k, v, color]) => (
+                <View key={k} style={s.detailRow}>
+                  <Text style={s.detailKey}>{k}</Text>
+                  <Text style={[s.detailVal, color ? { color, fontWeight: '700' } : null]}>{safeStr(v)}</Text>
                 </View>
-                <View style={styles.receiptDetailRow}>
-                  <Text style={styles.receiptDetailLabel}>Payments Remaining:</Text>
-                  <Text style={styles.receiptDetailValue}>{loanDetails.paymentsRemaining}</Text>
-                </View>
-              </View>
+              ))}
             </View>
           )}
         </View>
 
-        {/* Main Amount Display - Monthly Payment Due */}
-        <View style={styles.amountDisplaySection}>
-          <View style={styles.totalAmountContainer}>
-            <Text style={styles.currencyLabel}>PHP</Text>
-            <Text style={styles.totalAmount}>
-              {loanDetails.totalAmountDue.toFixed(2)}
-            </Text>
-            <Text style={styles.totalAmountLabel}>Monthly Payment Due</Text>
-            {loanDetails.lateFees > 0 && (
-              <Text style={styles.lateFeeWarning}>
-                (Includes ₱{loanDetails.lateFees.toFixed(2)} late fee)
-              </Text>
-            )}
-          </View>
-        </View>
-
-        {/* Late Fee Warning */}
-        {loanDetails.lateFees > 0 && (
-          <View style={styles.warningBanner}>
-            <MaterialIcons name="warning" size={20} color="#F97316" />
-            <Text style={styles.warningBannerText}>
-              Payment is {loanDetails.daysLate} days overdue. Late fee of ₱{loanDetails.lateFees.toFixed(2)} has been applied.
-            </Text>
-          </View>
+        {/* Pay Button */}
+        {!loan.isProcessing && (
+          <TouchableOpacity
+            style={[s.payBtn, { backgroundColor: accentColor, shadowColor: accentColor }]}
+            onPress={() => setShowMethodModal(true)}
+            activeOpacity={0.85}
+          >
+            <MaterialIcons name="payment" size={22} color="white" />
+            <Text style={s.payBtnTxt}>{`PAY NOW  ${fmt(loan.total)}`}</Text>
+          </TouchableOpacity>
         )}
 
-        {/* Payment Breakdown Section */}
-        <View style={styles.detailsSection}>
-          <Text style={styles.sectionHeader}>Payment Breakdown</Text>
-          <Text style={styles.dateRange}>
-            Due Date: {loanDetails.dueDate}
-          </Text>
-
-          <View style={styles.detailsContainer}>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Base Monthly Payment</Text>
-              <Text style={styles.detailAmount}>₱{loanDetails.basePayment?.toFixed(2)}</Text>
-            </View>
-
-            <View style={styles.detailRow}>
-              <Text style={styles.detailSubLabel}>• Principal</Text>
-              <Text style={styles.detailSubValue}>₱{loanDetails.principalAmount?.toFixed(2)}</Text>
-            </View>
-
-            <View style={styles.detailRow}>
-              <Text style={styles.detailSubLabel}>• Interest</Text>
-              <Text style={styles.detailSubValue}>₱{loanDetails.interestAmount?.toFixed(2)}</Text>
-            </View>
-
-            {loanDetails.lateFees > 0 && (
-              <>
-                <View style={styles.separator} />
-                <View style={styles.detailRow}>
-                  <Text style={[styles.detailLabel, { color: '#DC2626' }]}>
-                    Late Fee ({loanDetails.daysLate} days)
-                  </Text>
-                  <Text style={[styles.detailAmount, { color: '#DC2626' }]}>
-                    ₱{loanDetails.lateFees.toFixed(2)}
-                  </Text>
-                </View>
-              </>
-            )}
-
-            <View style={styles.separator} />
-
-            <View style={styles.detailRow}>
-              <Text style={styles.totalDueLabel}>Total Amount Due</Text>
-              <Text style={styles.totalDueAmount}>₱{loanDetails.totalAmountDue.toFixed(2)}</Text>
-            </View>
+        {/* Tips */}
+        <View style={s.tipsCard}>
+          <View style={s.tipsHeader}>
+            <MaterialIcons name="lightbulb" size={16} color={AMBER} />
+            <Text style={s.tipsTitle}>Payment Tips</Text>
           </View>
-
-          <Text style={styles.disclaimer}>
-            *This payment covers your monthly installment for {loanDetails.dueDate}
-          </Text>
+          {[
+            'Paying early reduces your remaining interest balance.',
+            'Lora Wallet payments are instant with zero fees.',
+            'Bank transfers take 1–3 business days to verify.',
+            `You have ${loan.paymentsRemaining} payment${loan.paymentsRemaining !== 1 ? 's' : ''} left on this loan.`,
+          ].map((tip, i) => (
+            <View key={i} style={s.tip}>
+              <View style={s.tipDot} />
+              <Text style={s.tipTxt}>{tip}</Text>
+            </View>
+          ))}
         </View>
 
-        {/* Loan Summary */}
-        <View style={styles.detailsSection}>
-          <Text style={styles.sectionHeader}>Loan Summary</Text>
-
-          <View style={styles.detailsContainer}>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Original Loan Amount</Text>
-              <Text style={styles.detailValue}>₱{loanDetails.loanAmount?.toLocaleString()}</Text>
-            </View>
-
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Remaining Balance</Text>
-              <Text style={styles.detailAmount}>
-                ₱{loanDetails.remainingBalance?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-              </Text>
-            </View>
-
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Interest Rate</Text>
-              <Text style={styles.detailValue}>{loanDetails.interestRate}% per annum</Text>
-            </View>
-
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Loan Term</Text>
-              <Text style={styles.detailValue}>{loanDetails.term}</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Payment Button */}
-        <TouchableOpacity
-          style={[
-            styles.payButton,
-            loanDetails.isProcessing && styles.disabledButton
-          ]}
-          onPress={handlePayNow}
-          disabled={loanDetails.isProcessing}
-        >
-          <MaterialIcons name="payment" size={20} color="white" />
-          <Text style={styles.payButtonText}>
-            {loanDetails.isProcessing ? 'PROCESSING...' : `PAY ₱${loanDetails.totalAmountDue.toFixed(2)}`}
-          </Text>
-        </TouchableOpacity>
-
-        {/* Additional Options */}
-        <View style={styles.additionalOptions}>
-          <TouchableOpacity 
-            style={styles.optionItem}
-            onPress={goToTransactions}
-          >
-            <Text style={styles.optionText}>Payment History</Text>
-            <MaterialIcons name="chevron-right" size={24} color="#6B7280" />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.optionItem}>
-            <Text style={styles.optionText}>Auto-Payment Settings</Text>
-            <MaterialIcons name="chevron-right" size={24} color="#6B7280" />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.optionItem}>
-            <Text style={styles.optionText}>Download Receipt</Text>
-            <MaterialIcons name="chevron-right" size={24} color="#6B7280" />
-          </TouchableOpacity>
-        </View>
       </ScrollView>
 
-      {/* Payment Method Selection Modal */}
-      <Modal
-        visible={showPaymentMethodModal}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={() => setShowPaymentMethodModal(false)}
-      >
-        <PaymentMethodModalContent
-          loanDetails={loanDetails}
-          paymentAmount={loanDetails?.totalAmountDue || 0}
-          transactions={transactions}
-          onClose={() => setShowPaymentMethodModal(false)}
-          onPaymentComplete={handlePaymentComplete}
+      {/* Payment Method Modal */}
+      <Modal visible={showMethodModal} animationType="slide" onRequestClose={() => setShowMethodModal(false)}>
+        <PayMethodScreen
+          loan={loan}
+          accentColor={accentColor}
+          onClose={() => setShowMethodModal(false)}
+          onComplete={handlePaymentComplete}
         />
       </Modal>
 
-      {/* Payment Success Modal */}
-      <Modal
-        visible={showConfirmationModal}
-        animationType="fade"
-        transparent={true}
-        onRequestClose={goBackToDashboard}
-      >
-        <View style={styles.centeredView}>
-          <View style={styles.successModal}>
-            <View style={styles.successIcon}>
-              <MaterialIcons name="check" size={40} color="white" />
+      {/* Success Modal */}
+      <Modal visible={showSuccess} animationType="fade" transparent onRequestClose={goToDashboard}>
+        <View style={s.successOverlay}>
+          <View style={s.successCard}>
+            <View style={[s.successIconWrap, { backgroundColor: newTx?.status === 'Completed' ? GREEN : AMBER }]}>
+              <MaterialIcons
+                name={newTx?.status === 'Completed' ? 'check-circle' : 'schedule'}
+                size={38} color="white"
+              />
             </View>
-
-            <Text style={styles.successTitle}>
-              {newTransaction?.status === 'Completed'
-                ? 'Payment Successful!' 
-                : 'Payment Submitted!'}
+            <Text style={s.successTitle}>
+              {newTx?.status === 'Completed' ? 'Payment Successful!' : 'Payment Submitted!'}
             </Text>
-            <Text style={styles.successMessage}>
-              {newTransaction?.processingMessage || 'Your payment has been processed successfully.'}
+            <Text style={s.successMsg}>
+              {safeStr(newTx?.processingMessage || 'Your payment has been processed successfully.')}
             </Text>
 
-            <View style={styles.successDetails}>
-              <Text style={styles.successDetailLabel}>Status:</Text>
-              <View style={styles.statusBadgeInline}>
-                <MaterialIcons
-                  name={newTransaction?.status === 'Completed' ? 'check-circle' : 'schedule'}
-                  size={16}
-                  color={newTransaction?.status === 'Completed' ? '#10B981' : '#F59E0B'}
-                />
-                <Text style={[
-                  styles.successDetailValue,
-                  { color: newTransaction?.status === 'Completed' ? '#10B981' : '#F59E0B' }
-                ]}>
-                  {newTransaction?.status || 'Completed'}
-                </Text>
-              </View>
+            <View style={s.successDetails}>
+              {([
+                ['Transaction ID',  safeStr(newTx?.transactionId)],
+                ['Loan',            `#${loan.id} · ${loan.type}`],
+                ['Lender',          loan.lender],
+                ['Payment Method',  safeStr(newTx?.paymentMethod)],
+                ['Loan Payment',    fmt(newTx?.amount)],
+                newTx?.fee > 0 ? ['Transaction Fee', fmt(newTx.fee)] : null,
+                ['Total Charged',   fmt(newTx?.totalAmount)],
+                ['Status',          safeStr(newTx?.status)],
+                ['Date & Time',     newTx?.date && newTx?.time ? `${newTx.date}  ${newTx.time}` : '—'],
+              ]).filter(Boolean).map(([k, v]) => (
+                <View key={k} style={s.successRow}>
+                  <Text style={s.successKey}>{k}</Text>
+                  <Text style={[
+                    s.successVal,
+                    k === 'Total Charged' ? { color: PURPLE, fontWeight: '800' } : null,
+                    k === 'Status' ? { color: newTx?.status === 'Completed' ? GREEN : AMBER, fontWeight: '700' } : null,
+                  ]}>{safeStr(v)}</Text>
+                </View>
+              ))}
             </View>
 
-            <View style={styles.successDetails}>
-              <Text style={styles.successDetailLabel}>Transaction ID:</Text>
-              <Text style={styles.successDetailValue}>{newTransaction?.transactionId || 'N/A'}</Text>
-            </View>
-
-            <View style={styles.successDetails}>
-              <Text style={styles.successDetailLabel}>Loan Payment:</Text>
-              <Text style={styles.successDetailValue}>₱{newTransaction?.amount || '0.00'}</Text>
-            </View>
-
-            {newTransaction?.fee > 0 && (
-              <View style={styles.successDetails}>
-                <Text style={styles.successDetailLabel}>Transaction Fee:</Text>
-                <Text style={styles.successDetailValue}>₱{newTransaction?.fee.toFixed(2)}</Text>
-              </View>
-            )}
-
-            <View style={styles.successDetails}>
-              <Text style={[styles.successDetailLabel, styles.totalAmountLabel]}>Total Amount:</Text>
-              <Text style={[styles.successDetailValue, styles.totalAmountValue]}>
-                ₱{newTransaction?.totalAmount || '0.00'}
-              </Text>
-            </View>
-
-            <View style={styles.successDetails}>
-              <Text style={styles.successDetailLabel}>Payment Method:</Text>
-              <Text style={styles.successDetailValue}>{newTransaction?.paymentMethod || 'N/A'}</Text>
-            </View>
-
-            <View style={styles.successActions}>
+            <View style={s.successBtns}>
               <TouchableOpacity
-                style={styles.viewTransactionButton}
-                onPress={goToTransactions}
+                style={s.successBtnSecondary}
+                onPress={() => {
+                  setShowSuccess(false);
+                  navigation.navigate('Transactions', {
+                    transactions: newTx ? [newTx, ...transactions] : transactions,
+                  });
+                }}
               >
-                <Text style={styles.viewTransactionButtonText}>View Receipt</Text>
+                <Text style={s.successBtnSecondaryTxt}>View Receipt</Text>
               </TouchableOpacity>
-
               <TouchableOpacity
-                style={styles.successButton}
-                onPress={goBackToDashboard}
+                style={[s.successBtnPrimary, { backgroundColor: accentColor }]}
+                onPress={goToDashboard}
               >
-                <Text style={styles.successButtonText}>Done</Text>
+                <Text style={s.successBtnPrimaryTxt}>Done</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
+
     </SafeAreaView>
   );
 };
 
-// Payment Method Modal Content Component
-const PaymentMethodModalContent = ({ loanDetails, paymentAmount, transactions, onClose, onPaymentComplete }) => {
-  const [selectedMethod, setSelectedMethod] = useState(null);
+// ─── Payment Method Screen ────────────────────────────────────────────────────
+const PayMethodScreen = ({ loan, accentColor = PURPLE, onClose, onComplete }) => {
+  const [selMethod,    setSelMethod]    = useState(null);
+  const [step,         setStep]         = useState('select');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [paymentStep, setPaymentStep] = useState('select'); // 'select', 'qr', 'form', 'receipt'
-  
-  // Form states
-  const [transactionCode, setTransactionCode] = useState('');
-  const [bankForm, setBankForm] = useState({ accountNumber: '', accountName: '', bankBranch: '', referenceNumber: '' });
-  const [cardForm, setCardForm] = useState({ cardNumber: '', cardholderName: '', expiryDate: '', cvv: '' });
-  const [receiptImage, setReceiptImage] = useState(null);
-
-  const paymentMethods = [
-    { id: 'wallet', name: 'Lora Wallet', icon: 'account-balance-wallet', category: 'wallet', fee: 0, description: 'Instant payment with no fees' },
-    { id: 'gcash', name: 'GCash', icon: 'smartphone', category: 'ewallet', fee: 1, description: 'Mobile wallet payment' },
-    { id: 'maya', name: 'Maya', icon: 'smartphone', category: 'ewallet', fee: 1, description: 'Digital wallet payment' },
-    { id: 'bpi', name: 'BPI', icon: 'account-balance', category: 'bank', fee: 1, description: 'Bank of the Philippine Islands' },
-    { id: 'bdo', name: 'BDO', icon: 'account-balance', category: 'bank', fee: 1, description: 'BDO Unibank' },
-    { id: 'metrobank', name: 'Metrobank', icon: 'account-balance', category: 'bank', fee: 1, description: 'Metropolitan Bank & Trust Co.' },
-    { id: 'landbank', name: 'Landbank', icon: 'account-balance', category: 'bank', fee: 1, description: 'Land Bank of the Philippines' },
-    { id: 'unionbank', name: 'UnionBank', icon: 'account-balance', category: 'bank', fee: 1, description: 'Union Bank of the Philippines' },
-    { id: 'visa', name: 'Visa', icon: 'credit-card', category: 'card', fee: 1, description: 'Visa Credit/Debit Card' },
-    { id: 'mastercard', name: 'Mastercard', icon: 'credit-card', category: 'card', fee: 1, description: 'Mastercard Credit/Debit' },
-  ];
-
-  const validateForm = () => {
-    if (selectedMethod.id === 'gcash' || selectedMethod.id === 'maya') {
-      if (!transactionCode || transactionCode.length < 8) {
-        Alert.alert('Invalid Code', 'Please enter a valid transaction reference number (at least 8 characters)');
-        return false;
-      }
-    } else if (selectedMethod.category === 'bank') {
-      if (!bankForm.referenceNumber || !receiptImage) {
-        Alert.alert('Required Fields', 'Please upload payment receipt and enter reference number');
-        return false;
-      }
-    } else if (selectedMethod.category === 'card') {
-      if (!cardForm.cardNumber || !cardForm.cardholderName || !cardForm.expiryDate || !cardForm.cvv) {
-        Alert.alert('Required Fields', 'Please fill in all card details');
-        return false;
-      }
-      if (cardForm.cardNumber.replace(/\s/g, '').length < 15) {
-        Alert.alert('Invalid Card', 'Please enter a valid card number');
-        return false;
-      }
-      if (cardForm.cvv.length < 3) {
-        Alert.alert('Invalid CVV', 'Please enter a valid CVV');
-        return false;
-      }
-    }
-    return true;
-  };
-
-  const processPayment = () => {
-    if (!selectedMethod) {
-      Alert.alert('Select Payment Method', 'Please select a payment method');
-      return;
-    }
-
-    // For wallet, proceed directly
-    if (selectedMethod.id === 'wallet') {
-      Alert.alert(
-        'Confirm Payment',
-        `Process payment of ₱${(paymentAmount + selectedMethod.fee).toFixed(2)} via ${selectedMethod.name}?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Confirm', onPress: () => executePayment() }
-        ]
-      );
-      return;
-    }
-
-    // For e-wallets, show QR code
-    if (selectedMethod.id === 'gcash' || selectedMethod.id === 'maya') {
-      setPaymentStep('qr');
-      return;
-    }
-
-    // For banks, show receipt upload
-    if (selectedMethod.category === 'bank') {
-      setPaymentStep('receipt');
-      return;
-    }
-
-    // For cards, validate and proceed
-    if (selectedMethod.category === 'card') {
-      if (!validateForm()) return;
-      Alert.alert(
-        'Confirm Payment',
-        `Process payment of ₱${(paymentAmount + selectedMethod.fee).toFixed(2)} via ${selectedMethod.name}?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Confirm', onPress: () => executePayment() }
-        ]
-      );
-    }
-  };
-
-  const handleUploadReceipt = () => {
-    // Simulate image picker
-    Alert.alert(
-      'Upload Receipt',
-      'Choose upload method',
-      [
-        {
-          text: 'Take Photo',
-          onPress: () => {
-            // Simulate camera
-            setReceiptImage({ uri: 'camera_image', name: 'receipt_photo.jpg', type: 'image/jpeg' });
-            Alert.alert('Success', 'Receipt photo captured successfully');
-          }
-        },
-        {
-          text: 'Choose from Gallery',
-          onPress: () => {
-            // Simulate gallery
-            setReceiptImage({ uri: 'gallery_image', name: 'receipt_upload.jpg', type: 'image/jpeg' });
-            Alert.alert('Success', 'Receipt uploaded from gallery');
-          }
-        },
-        { text: 'Cancel', style: 'cancel' }
-      ]
-    );
-  };
-
-  const submitPaymentWithReceipt = () => {
-    if (!validateForm()) return;
-
-    Alert.alert(
-      'Confirm Submission',
-      `Submit payment with uploaded receipt?\n\nYour payment will be verified within 1-3 business days.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Submit', onPress: () => executePayment() }
-      ]
-    );
-  };
-
-  const submitPaymentWithCode = () => {
-    if (!validateForm()) return;
-
-    Alert.alert(
-      'Confirm Payment',
-      `Submit payment with reference number:\n${transactionCode}?\n\nYour payment will be verified within 1-3 business days.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Submit', onPress: () => executePayment() }
-      ]
-    );
-  };
+  const [txRef,        setTxRef]        = useState('');
+  const [bankRef,      setBankRef]      = useState('');
+  const [receipt,      setReceipt]      = useState(null);
+  const [card,         setCard]         = useState({ number: '', name: '', expiry: '', cvv: '' });
 
   const executePayment = () => {
     setIsProcessing(true);
-
     setTimeout(() => {
-      const transactionId = `TXN-${Date.now()}`;
-      const currentDate = new Date();
-      
-      const newTransaction = {
-        id: transactionId,
-        type: 'Payment',
-        amount: paymentAmount.toFixed(2),
-        fee: selectedMethod.fee,
-        totalAmount: (paymentAmount + selectedMethod.fee).toFixed(2),
-        date: currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        time: currentDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
-        status: selectedMethod.id === 'wallet' ? 'Completed' : 'Pending',
-        loanId: loanDetails.applicationId,
-        transactionId: transactionId,
-        paymentMethod: selectedMethod.name,
-        lender: loanDetails.lender,
-        loanType: loanDetails.loanType,
-        isPending: selectedMethod.id !== 'wallet',
-        referenceNumber: selectedMethod.category === 'ewallet' ? transactionCode : selectedMethod.category === 'bank' ? bankForm.referenceNumber : null,
-        processingMessage: selectedMethod.id !== 'wallet' 
-          ? `Your payment via ${selectedMethod.name} is being processed. This may take 1-3 business days.`
-          : null,
+      const txId      = `TXN-${Date.now()}`;
+      const now       = new Date();
+      const loanTotal = Number(loan.total)    || 0;
+      const txFee     = Number(selMethod.fee) || 0;
+      const isInstant = selMethod.id === 'wallet';
+
+      // ── Commit to LoanStore so all screens see the updated balance / loan ──
+      if (isInstant) {
+        LoanStore.recordPayment({
+          amount:    loanTotal,
+          method:    selMethod.name,
+          principal: loan.principal || loanTotal,
+          interest:  loan.interest  || 0,
+        });
+      }
+
+      const tx = {
+        id:            txId,
+        transactionId: txId,
+        type:          'Payment',
+        amount:        loanTotal,
+        fee:           txFee,
+        totalAmount:   loanTotal + txFee,
+        date:          now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        time:          now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
+        status:        isInstant ? 'Completed' : 'Pending',
+        loanId:        loan.id,
+        paymentMethod: selMethod.name,
+        lender:        loan.lender,
+        isPending:     !isInstant,
+        referenceNumber: selMethod.cat === 'ewallet' ? txRef
+                       : selMethod.cat === 'bank'    ? bankRef : null,
+        processingMessage: isInstant
+          ? `Payment of ${fmt(loanTotal)} to ${loan.lender} completed instantly.`
+          : `Your payment via ${selMethod.name} is being verified. This may take 1–3 business days.`,
       };
-
       setIsProcessing(false);
-      onPaymentComplete(newTransaction);
-    }, 2000);
+      onComplete(tx);
+    }, 1800);
   };
 
-  const renderForm = () => {
-    if (!selectedMethod) return null;
-
-    // Wallet payment
-    if (selectedMethod.id === 'wallet') {
-      return (
-        <View style={styles.modalFormSection}>
-          <View style={styles.walletInfo}>
-            <MaterialIcons name="account-balance-wallet" size={48} color="#8B5CF6" />
-            <Text style={styles.walletTitle}>Lora Wallet</Text>
-            <Text style={styles.walletSubtext}>Instant payment with no fees</Text>
-            <View style={styles.walletBalance}>
-              <Text style={styles.balanceLabel}>Available Balance</Text>
-              <Text style={styles.balanceAmount}>₱12,500.75</Text>
-            </View>
-          </View>
-        </View>
+  const handleContinue = () => {
+    if (!selMethod) { Alert.alert('Select a payment method'); return; }
+    if (selMethod.id === 'wallet') {
+      const walletBal = LoanStore.getWalletBalance();
+      Alert.alert(
+        'Confirm Payment',
+        `Pay ${fmt(loan.total)} from your Lora Wallet?\n\nLoan: #${loan.id}\nLender: ${loan.lender}\nAvailable: ${fmt(walletBal)}`,
+        [{ text: 'Cancel', style: 'cancel' }, { text: 'Confirm', onPress: executePayment }]
       );
+      return;
     }
-
-    // E-wallet QR Code Step
-    if ((selectedMethod.id === 'gcash' || selectedMethod.id === 'maya') && paymentStep === 'qr') {
-      return (
-        <View style={styles.modalFormSection}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => setPaymentStep('select')}
-          >
-            <MaterialIcons name="arrow-back" size={20} color="#8B5CF6" />
-            <Text style={styles.backButtonText}>Back to payment methods</Text>
-          </TouchableOpacity>
-
-          <Text style={styles.formTitle}>Scan QR Code</Text>
-          <Text style={styles.instructionText}>
-            1. Open your {selectedMethod.name} app{'\n'}
-            2. Scan the QR code below{'\n'}
-            3. Complete the payment{'\n'}
-            4. Enter the transaction reference number
-          </Text>
-
-          <View style={styles.qrContainer}>
-            <View style={styles.qrPlaceholder}>
-              <MaterialIcons name="qr-code-2" size={120} color="#8B5CF6" />
-              <Text style={styles.qrText}>QR Code for {selectedMethod.name}</Text>
-            </View>
-            <View style={styles.qrDetails}>
-              <Text style={styles.qrDetailLabel}>Send to:</Text>
-              <Text style={styles.qrDetailValue}>0999 999 9999</Text>
-              <Text style={styles.qrDetailLabel}>Amount:</Text>
-              <Text style={styles.qrDetailValueAmount}>₱{(paymentAmount + selectedMethod.fee).toFixed(2)}</Text>
-            </View>
-          </View>
-
-          <Text style={styles.orDividerText}>OR Send directly to</Text>
-          <View style={styles.sendToCard}>
-            <MaterialIcons name="smartphone" size={24} color="#8B5CF6" />
-            <Text style={styles.sendToNumber}>0999 999 9999</Text>
-          </View>
-
-          <Text style={styles.formSubtitle}>Enter Transaction Reference Number</Text>
-          <TextInput
-            style={styles.modalInput}
-            placeholder="e.g. GC12345678 or REF123456"
-            value={transactionCode}
-            onChangeText={setTransactionCode}
-            autoCapitalize="characters"
-          />
-
-          <TouchableOpacity
-            style={[styles.submitButton, !transactionCode && styles.disabledButton]}
-            onPress={submitPaymentWithCode}
-            disabled={!transactionCode}
-          >
-            <Text style={styles.submitButtonText}>Submit Payment</Text>
-          </TouchableOpacity>
-        </View>
-      );
-    }
-
-    // Bank Receipt Upload Step
-    if (selectedMethod.category === 'bank' && paymentStep === 'receipt') {
-      return (
-        <View style={styles.modalFormSection}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => setPaymentStep('select')}
-          >
-            <MaterialIcons name="arrow-back" size={20} color="#8B5CF6" />
-            <Text style={styles.backButtonText}>Back to payment methods</Text>
-          </TouchableOpacity>
-
-          <Text style={styles.formTitle}>{selectedMethod.name} Payment</Text>
-          <Text style={styles.instructionText}>
-            Transfer payment to our {selectedMethod.name} account and upload the receipt
-          </Text>
-
-          <View style={styles.bankDetailsCard}>
-            <Text style={styles.bankDetailLabel}>Bank Name:</Text>
-            <Text style={styles.bankDetailValue}>{selectedMethod.name}</Text>
-            <Text style={styles.bankDetailLabel}>Account Name:</Text>
-            <Text style={styles.bankDetailValue}>Lora Finance Corporation</Text>
-            <Text style={styles.bankDetailLabel}>Account Number:</Text>
-            <Text style={styles.bankDetailValue}>1234 5678 9012</Text>
-            <Text style={styles.bankDetailLabel}>Amount to Transfer:</Text>
-            <Text style={styles.bankDetailValueAmount}>₱{(paymentAmount + selectedMethod.fee).toFixed(2)}</Text>
-          </View>
-
-          <View style={styles.uploadSection}>
-            <Text style={styles.formSubtitle}>Upload Payment Receipt</Text>
-            <TouchableOpacity
-              style={styles.uploadButton}
-              onPress={handleUploadReceipt}
-            >
-              <MaterialIcons 
-                name={receiptImage ? "check-circle" : "cloud-upload"} 
-                size={24} 
-                color={receiptImage ? "#10B981" : "#8B5CF6"} 
-              />
-              <Text style={[styles.uploadButtonText, receiptImage && styles.uploadedText]}>
-                {receiptImage ? 'Receipt Uploaded ✓' : 'Upload Receipt (Photo/PDF)'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <TextInput
-            style={styles.modalInput}
-            placeholder="Reference Number (from receipt)"
-            value={bankForm.referenceNumber}
-            onChangeText={(text) => setBankForm({...bankForm, referenceNumber: text})}
-            autoCapitalize="characters"
-          />
-
-          <TouchableOpacity
-            style={[styles.submitButton, (!receiptImage || !bankForm.referenceNumber) && styles.disabledButton]}
-            onPress={submitPaymentWithReceipt}
-            disabled={!receiptImage || !bankForm.referenceNumber}
-          >
-            <Text style={styles.submitButtonText}>Submit for Verification</Text>
-          </TouchableOpacity>
-
-          <Text style={styles.verificationNote}>
-            ⓘ Payment will be verified within 1-3 business days
-          </Text>
-        </View>
-      );
-    }
-
-    // Card payment form
-    if (selectedMethod.category === 'card') {
-      return (
-        <View style={styles.modalFormSection}>
-          <Text style={styles.formTitle}>{selectedMethod.name} Card Details</Text>
-          <TextInput
-            style={styles.modalInput}
-            placeholder="Card Number"
-            keyboardType="number-pad"
-            maxLength={19}
-            value={cardForm.cardNumber}
-            onChangeText={(text) => {
-              const formatted = text.replace(/\s/g, '').replace(/(\d{4})/g, '$1 ').trim();
-              setCardForm({...cardForm, cardNumber: formatted});
-            }}
-          />
-          <TextInput
-            style={styles.modalInput}
-            placeholder="Cardholder Name"
-            autoCapitalize="characters"
-            value={cardForm.cardholderName}
-            onChangeText={(text) => setCardForm({...cardForm, cardholderName: text})}
-          />
-          <View style={styles.cardRow}>
-            <TextInput
-              style={[styles.modalInput, {flex: 1, marginRight: 8}]}
-              placeholder="MM/YY"
-              keyboardType="number-pad"
-              maxLength={5}
-              value={cardForm.expiryDate}
-              onChangeText={(text) => {
-                let formatted = text.replace(/\D/g, '');
-                if (formatted.length >= 2) {
-                  formatted = formatted.slice(0, 2) + '/' + formatted.slice(2, 4);
-                }
-                setCardForm({...cardForm, expiryDate: formatted});
-              }}
-            />
-            <TextInput
-              style={[styles.modalInput, {flex: 1, marginLeft: 8}]}
-              placeholder="CVV"
-              keyboardType="number-pad"
-              maxLength={3}
-              secureTextEntry
-              value={cardForm.cvv}
-              onChangeText={(text) => setCardForm({...cardForm, cvv: text})}
-            />
-          </View>
-        </View>
-      );
-    }
+    setStep('form');
   };
+
+  const handleSubmitForm = () => {
+    if (selMethod.cat === 'ewallet' && txRef.length < 8) {
+      Alert.alert('Invalid Reference', 'Enter a valid reference number (min 8 characters)'); return;
+    }
+    if (selMethod.cat === 'bank' && (!bankRef || !receipt)) {
+      Alert.alert('Missing Fields', 'Upload your receipt and enter your reference number'); return;
+    }
+    if (selMethod.cat === 'card') {
+      if (!card.number || !card.name || !card.expiry || !card.cvv) {
+        Alert.alert('Missing Card Details', 'Please fill in all card fields'); return;
+      }
+      if (card.number.replace(/\s/g, '').length < 15) { Alert.alert('Invalid Card Number'); return; }
+    }
+    Alert.alert(
+      'Confirm Payment',
+      `Submit ${fmt(Number(loan.total) + selMethod.fee)} via ${selMethod.name}?\n\nLoan: #${loan.id} · ${loan.type}\nLender: ${loan.lender}`,
+      [{ text: 'Cancel', style: 'cancel' }, { text: 'Submit', onPress: executePayment }]
+    );
+  };
+
+  if (isProcessing) {
+    return (
+      <SafeAreaView style={[pm.root, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={accentColor} />
+        <Text style={pm.procTxt}>Processing payment…</Text>
+        <Text style={pm.procSub}>Please wait, do not close this screen</Text>
+      </SafeAreaView>
+    );
+  }
 
   return (
-    <SafeAreaView style={styles.modalContainer}>
-      <View style={styles.modalHeader}>
-        <TouchableOpacity onPress={onClose}>
-          <MaterialIcons name="arrow-back" size={24} color="white" />
+    <SafeAreaView style={pm.root}>
+
+      <View style={pm.header}>
+        <TouchableOpacity onPress={step === 'form' ? () => setStep('select') : onClose} style={pm.headerBtn}>
+          <MaterialIcons name="arrow-back" size={24} color="#374151" />
         </TouchableOpacity>
-        <Text style={styles.modalHeaderTitle}>Choose Payment Method</Text>
-        <View style={{width: 24}} />
+        <Text style={pm.headerTitle}>
+          {step === 'form' ? safeStr(selMethod?.name) : 'Choose Payment Method'}
+        </Text>
+        <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-        {paymentStep === 'select' && (
-          <>
-            <View style={styles.modalAmountSection}>
-              <Text style={styles.modalAmountLabel}>Amount to Pay</Text>
-              <Text style={styles.modalAmountValue}>₱{paymentAmount.toFixed(2)}</Text>
-              {selectedMethod && selectedMethod.fee > 0 && (
-                <Text style={styles.modalFeeText}>+ ₱{selectedMethod.fee.toFixed(2)} transaction fee</Text>
-              )}
-            </View>
+      <View style={[pm.amtBanner, { backgroundColor: `${accentColor}12` }]}>
+        <MaterialIcons name="payment" size={16} color={accentColor} />
+        <View style={{ flex: 1, marginLeft: 8 }}>
+          <Text style={[pm.amtBannerTxt, { color: accentColor }]}>
+            {`Paying ${fmt(loan.total)}${selMethod?.fee > 0 ? ` + ${fmt(selMethod.fee)} fee` : ''}`}
+          </Text>
+          <Text style={pm.amtBannerSub}>{`Loan #${loan.id} · ${loan.lender}`}</Text>
+        </View>
+      </View>
 
-            <View style={styles.methodsGrid}>
-              {paymentMethods.map((method) => (
+      {step === 'select' && (
+        <ScrollView contentContainerStyle={{ padding: 16 }}>
+          {(['wallet', 'ewallet', 'bank', 'card']).map(cat => (
+            <View key={cat}>
+              <Text style={pm.catLabel}>{CAT_LABELS[cat]}</Text>
+              {METHODS.filter(m => m.cat === cat).map(m => (
                 <TouchableOpacity
-                  key={method.id}
-                  style={[
-                    styles.methodCardModal,
-                    selectedMethod?.id === method.id && styles.methodCardSelected
-                  ]}
-                  onPress={() => setSelectedMethod(method)}
+                  key={m.id}
+                  style={[pm.methodCard, selMethod?.id === m.id ? { borderColor: accentColor, backgroundColor: `${accentColor}08` } : null]}
+                  onPress={() => setSelMethod(m)}
                 >
-                  <MaterialIcons
-                    name={method.icon}
-                    size={24}
-                    color={selectedMethod?.id === method.id ? '#8B5CF6' : '#6B7280'}
-                  />
-                  <Text style={[
-                    styles.methodNameModal,
-                    selectedMethod?.id === method.id && styles.methodNameSelected
-                  ]}>
-                    {method.name}
-                  </Text>
-                  {selectedMethod?.id === method.id && (
-                    <MaterialIcons name="check-circle" size={16} color="#8B5CF6" style={styles.checkIcon} />
-                  )}
+                  <View style={[pm.methodIcon, { backgroundColor: `${m.color}18` }]}>
+                    <MaterialIcons name={m.icon} size={24} color={m.color} />
+                  </View>
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={pm.methodName}>{m.name}</Text>
+                    <Text style={pm.methodDesc}>{`${m.desc}${m.fee > 0 ? `  ·  +${fmt(m.fee)} fee` : '  ·  Free'}`}</Text>
+                  </View>
+                  <View style={[pm.radioOuter, selMethod?.id === m.id ? { borderColor: accentColor } : null]}>
+                    {selMethod?.id === m.id && <View style={[pm.radioInner, { backgroundColor: accentColor }]} />}
+                  </View>
                 </TouchableOpacity>
               ))}
             </View>
-          </>
-        )}
+          ))}
 
-        {renderForm()}
-      </ScrollView>
+          {selMethod && (
+            <View style={pm.feeBox}>
+              <View style={pm.feeRow}>
+                <Text style={pm.feeLbl}>Loan Payment</Text>
+                <Text style={pm.feeVal}>{fmt(loan.total)}</Text>
+              </View>
+              <View style={pm.feeRow}>
+                <Text style={pm.feeLbl}>Transaction Fee</Text>
+                <Text style={[pm.feeVal, selMethod.fee === 0 ? { color: GREEN } : null]}>
+                  {selMethod.fee === 0 ? 'FREE' : fmt(selMethod.fee)}
+                </Text>
+              </View>
+              <View style={pm.feeRowTotal}>
+                <Text style={pm.feeLblBold}>Total to Pay</Text>
+                <Text style={[pm.feeValBold, { color: accentColor }]}>
+                  {fmt(Number(loan.total) + selMethod.fee)}
+                </Text>
+              </View>
+            </View>
+          )}
 
-      <View style={styles.modalFooter}>
-        {paymentStep === 'select' && (
           <TouchableOpacity
-            style={[styles.payNowButton, (!selectedMethod || isProcessing) && styles.disabledButton]}
-            onPress={processPayment}
-            disabled={!selectedMethod || isProcessing}
+            style={[pm.primaryBtn, { backgroundColor: selMethod ? accentColor : '#C4B5FD' }]}
+            onPress={handleContinue}
+            disabled={!selMethod}
           >
-            <Text style={styles.payNowButtonText}>
-              {isProcessing ? 'Processing...' : selectedMethod?.id === 'wallet' 
-                ? `Pay ₱${(paymentAmount + (selectedMethod?.fee || 0)).toFixed(2)}`
-                : 'Continue'}
-            </Text>
+            <Text style={pm.primaryBtnTxt}>Continue</Text>
+            <MaterialIcons name="arrow-forward" size={18} color="white" style={{ marginLeft: 6 }} />
           </TouchableOpacity>
-        )}
-      </View>
+        </ScrollView>
+      )}
+
+      {step === 'form' && selMethod && (
+        <ScrollView contentContainerStyle={{ padding: 16 }}>
+
+          {selMethod.cat === 'ewallet' && (
+            <>
+              <View style={pm.instrBox}>
+                <Text style={pm.instrTitle}>{`How to pay via ${selMethod.name}`}</Text>
+                {[
+                  `Open your ${selMethod.name} app`,
+                  'Scan the QR code or send to the number below',
+                  `Use reference: Loan #${loan.id}`,
+                  'Enter your transaction reference number below',
+                ].map((t, i) => (
+                  <View key={i} style={pm.instrRow}>
+                    <View style={[pm.instrNum, { backgroundColor: accentColor }]}>
+                      <Text style={pm.instrNumTxt}>{String(i + 1)}</Text>
+                    </View>
+                    <Text style={pm.instrTxt}>{t}</Text>
+                  </View>
+                ))}
+              </View>
+              <View style={pm.qrBox}>
+                <MaterialIcons name="qr-code-2" size={100} color={accentColor} />
+                <Text style={pm.qrTxt}>{`QR Code — ${selMethod.name}`}</Text>
+                <View style={pm.sendToRow}>
+                  <MaterialIcons name="smartphone" size={16} color={accentColor} />
+                  <Text style={[pm.sendToTxt, { color: accentColor }]}>Send to: 0999 999 9999</Text>
+                </View>
+                <Text style={pm.sendAmt}>{fmt(loan.total)}</Text>
+                <Text style={pm.sendRef}>{`Ref: ${loan.id}`}</Text>
+              </View>
+              <Text style={pm.fieldLbl}>Transaction Reference Number</Text>
+              <TextInput
+                style={pm.input}
+                placeholder="e.g. GC12345678"
+                value={txRef}
+                onChangeText={setTxRef}
+                autoCapitalize="characters"
+                placeholderTextColor="#9CA3AF"
+              />
+              <TouchableOpacity
+                style={[pm.primaryBtn, { backgroundColor: txRef.length < 8 ? '#C4B5FD' : accentColor }]}
+                onPress={handleSubmitForm}
+                disabled={txRef.length < 8}
+              >
+                <Text style={pm.primaryBtnTxt}>Submit Payment</Text>
+              </TouchableOpacity>
+            </>
+          )}
+
+          {selMethod.cat === 'bank' && (
+            <>
+              <View style={pm.bankCard}>
+                <Text style={pm.bankCardTitle}>Transfer to this account</Text>
+                {[
+                  ['Bank',           selMethod.name],
+                  ['Account Name',   'Lora Finance Corporation'],
+                  ['Account Number', '1234 5678 9012'],
+                  ['Reference',      `Loan ${loan.id}`],
+                  ['Amount',         fmt(Number(loan.total) + selMethod.fee)],
+                ].map(([k, v]) => (
+                  <View key={k} style={pm.bankRow}>
+                    <Text style={pm.bankKey}>{k}</Text>
+                    <Text style={[pm.bankVal, k === 'Amount' ? { color: accentColor, fontWeight: '800' } : null]}>{v}</Text>
+                  </View>
+                ))}
+              </View>
+              <Text style={pm.fieldLbl}>Upload Payment Receipt</Text>
+              <TouchableOpacity
+                style={[pm.uploadBtn, receipt ? pm.uploadBtnDone : null]}
+                onPress={() => Alert.alert('Upload Receipt', 'Choose method:', [
+                  { text: 'Take Photo',          onPress: () => setReceipt({ name: 'receipt_photo.jpg' }) },
+                  { text: 'Choose from Gallery', onPress: () => setReceipt({ name: 'receipt_upload.jpg' }) },
+                  { text: 'Cancel', style: 'cancel' },
+                ])}
+              >
+                <MaterialIcons name={receipt ? 'check-circle' : 'cloud-upload'} size={22} color={receipt ? GREEN : accentColor} />
+                <Text style={[pm.uploadBtnTxt, { color: receipt ? GREEN : accentColor }]}>
+                  {receipt ? `Uploaded: ${receipt.name}` : 'Upload Receipt (Photo / PDF)'}
+                </Text>
+              </TouchableOpacity>
+              <Text style={pm.fieldLbl}>Reference / Confirmation Number</Text>
+              <TextInput
+                style={pm.input}
+                placeholder="From your bank receipt"
+                value={bankRef}
+                onChangeText={setBankRef}
+                autoCapitalize="characters"
+                placeholderTextColor="#9CA3AF"
+              />
+              <Text style={pm.verifyNote}>⏱ Payment verified within 1–3 business days</Text>
+              <TouchableOpacity
+                style={[pm.primaryBtn, { backgroundColor: (!receipt || !bankRef) ? '#C4B5FD' : accentColor }]}
+                onPress={handleSubmitForm}
+                disabled={!receipt || !bankRef}
+              >
+                <Text style={pm.primaryBtnTxt}>Submit for Verification</Text>
+              </TouchableOpacity>
+            </>
+          )}
+
+          {selMethod.cat === 'card' && (
+            <>
+              <Text style={pm.fieldLbl}>Card Number</Text>
+              <TextInput
+                style={pm.input} placeholder="0000 0000 0000 0000" keyboardType="number-pad" maxLength={19}
+                value={card.number}
+                onChangeText={t => setCard({ ...card, number: t.replace(/\s/g, '').replace(/(\d{4})/g, '$1 ').trim() })}
+                placeholderTextColor="#9CA3AF"
+              />
+              <Text style={pm.fieldLbl}>Cardholder Name</Text>
+              <TextInput
+                style={pm.input} placeholder="JUAN DELA CRUZ" autoCapitalize="characters"
+                value={card.name} onChangeText={t => setCard({ ...card, name: t })}
+                placeholderTextColor="#9CA3AF"
+              />
+              <View style={pm.twoCol}>
+                <View style={{ flex: 1 }}>
+                  <Text style={pm.fieldLbl}>Expiry (MM/YY)</Text>
+                  <TextInput
+                    style={pm.input} placeholder="MM/YY" keyboardType="number-pad" maxLength={5}
+                    value={card.expiry}
+                    onChangeText={t => { let f = t.replace(/\D/g, ''); if (f.length >= 2) f = f.slice(0, 2) + '/' + f.slice(2, 4); setCard({ ...card, expiry: f }); }}
+                    placeholderTextColor="#9CA3AF"
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={pm.fieldLbl}>CVV</Text>
+                  <TextInput
+                    style={pm.input} placeholder="123" keyboardType="number-pad" maxLength={4} secureTextEntry
+                    value={card.cvv} onChangeText={t => setCard({ ...card, cvv: t })}
+                    placeholderTextColor="#9CA3AF"
+                  />
+                </View>
+              </View>
+              <View style={pm.feeBox}>
+                <View style={pm.feeRow}>
+                  <Text style={pm.feeLbl}>Loan Payment</Text>
+                  <Text style={pm.feeVal}>{fmt(loan.total)}</Text>
+                </View>
+                <View style={pm.feeRow}>
+                  <Text style={pm.feeLbl}>Service Fee (1.6%)</Text>
+                  <Text style={pm.feeVal}>{fmt(selMethod.fee)}</Text>
+                </View>
+                <View style={pm.feeRowTotal}>
+                  <Text style={pm.feeLblBold}>Total</Text>
+                  <Text style={[pm.feeValBold, { color: accentColor }]}>{fmt(Number(loan.total) + selMethod.fee)}</Text>
+                </View>
+              </View>
+              <TouchableOpacity style={[pm.primaryBtn, { backgroundColor: accentColor }]} onPress={handleSubmitForm}>
+                <Text style={pm.primaryBtnTxt}>{`Pay ${fmt(Number(loan.total) + selMethod.fee)}`}</Text>
+              </TouchableOpacity>
+            </>
+          )}
+
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#8B5CF6',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: 'white',
-  },
-  content: {
-    flexGrow: 1,
-    paddingBottom: 20,
-  },
-  receiptSection: {
-    backgroundColor: 'white',
-    margin: 16,
-    marginBottom: 0,
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  receiptHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  receiptTitleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  receiptTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginLeft: 8,
-    marginRight: 12,
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#D1FAE5',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 4,
-  },
-  toggleButton: {
-    padding: 4,
-  },
-  receiptSummary: {
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  receiptNumber: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    marginBottom: 4,
-  },
-  receiptDate: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  receiptDetails: {
-    marginTop: 12,
-  },
-  receiptDivider: {
-    height: 1,
-    backgroundColor: '#E5E7EB',
-    marginVertical: 16,
-  },
-  receiptSectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 8,
-  },
-  receiptDetailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  receiptDetailLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-    flex: 1,
-  },
-  receiptDetailValue: {
-    fontSize: 12,
-    color: '#1F2937',
-    fontWeight: '500',
-    textAlign: 'right',
-    flex: 1,
-  },
-  receiptDetailValueAmount: {
-    fontSize: 12,
-    color: '#1F2937',
-    fontWeight: '600',
-    textAlign: 'right',
-    flex: 1,
-  },
-  amountDisplaySection: {
-    backgroundColor: '#8B5CF6',
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 16,
-    paddingVertical: 24,
-    marginBottom: 16,
-  },
-  totalAmountContainer: {
-    alignItems: 'center',
-  },
-  currencyLabel: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 5,
-  },
-  totalAmount: {
-    color: 'white',
-    fontSize: 48,
-    fontWeight: 'bold',
-    marginBottom: 5,
-  },
-  totalAmountLabel: {
-    color: 'rgba(255, 255, 255, 0.9)',
-    fontSize: 16,
-  },
-  lateFeeWarning: {
-    color: '#FED7AA',
-    fontSize: 13,
-    marginTop: 8,
-    fontStyle: 'italic',
-  },
-  warningBanner: {
-    backgroundColor: '#FFF7ED',
-    marginHorizontal: 16,
-    marginBottom: 16,
-    padding: 12,
-    borderRadius: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderLeftWidth: 4,
-    borderLeftColor: '#F97316',
-  },
-  warningBannerText: {
-    color: '#9A3412',
-    fontSize: 14,
-    marginLeft: 8,
-    flex: 1,
-  },
-  detailsSection: {
-    backgroundColor: 'white',
-    margin: 16,
-    marginTop: 0,
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  sectionHeader: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 5,
-  },
-  dateRange: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 20,
-  },
-  detailsContainer: {
-    marginBottom: 15,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  detailLabel: {
-    fontSize: 16,
-    color: '#1F2937',
-    fontWeight: '500',
-  },
-  detailAmount: {
-    fontSize: 16,
-    color: '#1F2937',
-    fontWeight: '600',
-  },
-  detailValue: {
-    fontSize: 16,
-    color: '#6B7280',
-  },
-  detailSubLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-    paddingLeft: 10,
-  },
-  detailSubValue: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  separator: {
-    height: 1,
-    backgroundColor: '#E5E7EB',
-    marginVertical: 12,
-  },
-  totalDueLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  totalDueAmount: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#8B5CF6',
-  },
-  disclaimer: {
-    fontSize: 12,
-    color: '#6B7280',
-    fontStyle: 'italic',
-    textAlign: 'center',
-    marginTop: 10,
-  },
-  payButton: {
-    backgroundColor: '#8B5CF6',
-    marginHorizontal: 16,
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 20,
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  disabledButton: {
-    backgroundColor: '#9CA3AF',
-  },
-  payButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  additionalOptions: {
-    backgroundColor: 'white',
-    marginHorizontal: 16,
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginBottom: 20,
-  },
-  optionItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  optionText: {
-    fontSize: 16,
-    color: '#1F2937',
-  },
-  centeredView: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  successModal: {
-    width: '90%',
-    backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 30,
-    alignItems: 'center',
-  },
-  successIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#10B981',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  successTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    marginBottom: 10,
-  },
-  successMessage: {
-    fontSize: 16,
-    color: '#6B7280',
-    textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 20,
-  },
-  successDetails: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-    marginBottom: 10,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  successDetailLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  successDetailValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  totalAmountValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#8B5CF6',
-  },
-  successActions: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 20,
-    width: '100%',
-  },
-  viewTransactionButton: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: '#8B5CF6',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    flex: 1,
-  },
-  viewTransactionButtonText: {
-    color: '#8B5CF6',
-    fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  successButton: {
-    backgroundColor: '#8B5CF6',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    flex: 1,
-  },
-  successButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  statusBadgeInline: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#6B7280',
-  },
-  // Modal styles
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#8B5CF6',
-  },
-  modalHeaderTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: 'white',
-  },
-  modalContent: {
-    flex: 1,
-  },
-  modalAmountSection: {
-    backgroundColor: '#8B5CF6',
-    margin: 16,
-    padding: 24,
-    borderRadius: 16,
-    alignItems: 'center',
-  },
-  modalAmountLabel: {
-    color: 'rgba(255, 255, 255, 0.9)',
-    fontSize: 14,
-    marginBottom: 8,
-  },
-  modalAmountValue: {
-    color: 'white',
-    fontSize: 36,
-    fontWeight: 'bold',
-  },
-  modalFeeText: {
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 14,
-    marginTop: 8,
-  },
-  methodsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    padding: 16,
-    paddingTop: 8,
-  },
-  methodCardModal: {
-    width: (width - 48) / 3,
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 12,
-    margin: 4,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
-    minHeight: 90,
-    position: 'relative',
-  },
-  methodCardSelected: {
-    borderColor: '#8B5CF6',
-    backgroundColor: '#F5F3FF',
-  },
-  methodNameModal: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#1F2937',
-    textAlign: 'center',
-    marginTop: 8,
-  },
-  methodNameSelected: {
-    color: '#8B5CF6',
-  },
-  checkIcon: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-  },
-  modalFormSection: {
-    backgroundColor: 'white',
-    margin: 16,
-    marginTop: 0,
-    padding: 20,
-    borderRadius: 16,
-  },
-  formTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 16,
-  },
-  modalInput: {
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    color: '#1F2937',
-    marginBottom: 12,
-  },
-  cardRow: {
-    flexDirection: 'row',
-  },
-  walletInfo: {
-    alignItems: 'center',
-    paddingVertical: 20,
-  },
-  walletTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  walletSubtext: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 20,
-  },
-  walletBalance: {
-    backgroundColor: '#F5F3FF',
-    padding: 20,
-    borderRadius: 12,
-    width: '100%',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#DDD6FE',
-  },
-  balanceLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 8,
-  },
-  balanceAmount: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#8B5CF6',
-  },
-  modalFooter: {
-    padding: 16,
-    backgroundColor: 'white',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-  },
-  payNowButton: {
-    backgroundColor: '#8B5CF6',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  payNowButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  backButtonText: {
-    color: '#8B5CF6',
-    fontSize: 14,
-    marginLeft: 8,
-    fontWeight: '500',
-  },
-  instructionText: {
-    fontSize: 14,
-    color: '#6B7280',
-    lineHeight: 22,
-    marginBottom: 20,
-  },
-  qrContainer: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
-    padding: 20,
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  qrPlaceholder: {
-    backgroundColor: 'white',
-    padding: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
-    borderStyle: 'dashed',
-    marginBottom: 16,
-  },
-  qrText: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 12,
-  },
-  qrDetails: {
-    width: '100%',
-    backgroundColor: 'white',
-    padding: 16,
-    borderRadius: 8,
-  },
-  qrDetailLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginBottom: 4,
-  },
-  qrDetailValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 12,
-  },
-  qrDetailValueAmount: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#8B5CF6',
-  },
-  orDividerText: {
-    textAlign: 'center',
-    color: '#6B7280',
-    fontSize: 14,
-    marginVertical: 16,
-  },
-  sendToCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F5F3FF',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#DDD6FE',
-  },
-  sendToNumber: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#8B5CF6',
-    marginLeft: 12,
-  },
-  formSubtitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 12,
-  },
-  submitButton: {
-    backgroundColor: '#8B5CF6',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  submitButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  bankDetailsCard: {
-    backgroundColor: '#F5F3FF',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#DDD6FE',
-  },
-  bankDetailLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginBottom: 4,
-  },
-  bankDetailValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 12,
-  },
-  bankDetailValueAmount: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#8B5CF6',
-  },
-  uploadSection: {
-    marginBottom: 20,
-  },
-  uploadButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F9FAFB',
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
-    borderStyle: 'dashed',
-    padding: 20,
-    borderRadius: 12,
-    marginTop: 8,
-  },
-  uploadButtonText: {
-    fontSize: 14,
-    color: '#8B5CF6',
-    fontWeight: '500',
-    marginLeft: 8,
-  },
-  uploadedText: {
-    color: '#10B981',
-  },
-  verificationNote: {
-    fontSize: 12,
-    color: '#6B7280',
-    textAlign: 'center',
-    marginTop: 12,
-    fontStyle: 'italic',
-  },
+// ─── Styles: Main ─────────────────────────────────────────────────────────────
+const s = StyleSheet.create({
+  root:       { flex: 1, backgroundColor: '#F5F6FA' },
+  scroll:     { padding: 16, paddingBottom: 60 },
+  loading:    { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 14 },
+  loadingTxt: { fontSize: 15, color: '#6B7280' },
+
+  header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 13 },
+  headerBtn:    { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
+  headerCenter: { flex: 1, alignItems: 'center' },
+  headerTitle:  { fontSize: 17, fontWeight: '700', color: 'white' },
+  headerSub:    { fontSize: 11, color: 'rgba(255,255,255,0.7)', marginTop: 1 },
+
+  processingBanner:  { flexDirection: 'row', alignItems: 'flex-start', gap: 12, backgroundColor: '#FFFBEB', borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#FDE68A' },
+  processingIconWrap:{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#FEF3C7', justifyContent: 'center', alignItems: 'center' },
+  processingTitle:   { fontSize: 14, fontWeight: '700', color: '#92400E', marginBottom: 3 },
+  processingMsg:     { fontSize: 12, color: '#78350F', lineHeight: 18 },
+  processingDate:    { fontSize: 11, color: '#B45309', marginTop: 4 },
+
+  urgentBanner: { flexDirection: 'row', alignItems: 'flex-start', borderRadius: 12, padding: 12, marginBottom: 14, borderWidth: 1 },
+  urgentRed:    { backgroundColor: '#FEF2F2', borderColor: '#FECACA' },
+  urgentOrange: { backgroundColor: '#FFF7ED', borderColor: '#FED7AA' },
+  urgentTitle:  { fontSize: 13, fontWeight: '700', marginBottom: 2 },
+  urgentMsg:    { fontSize: 12, lineHeight: 17 },
+
+  amountCard:   { borderRadius: 22, padding: 22, marginBottom: 14, alignItems: 'center', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 16, elevation: 8 },
+  amountCardTop:{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 14 },
+  loanChip:     { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
+  loanChipTxt:  { fontSize: 11, color: 'white', fontWeight: '600' },
+  amountLender: { fontSize: 12, color: 'rgba(255,255,255,0.8)', fontWeight: '500' },
+  amountLbl:    { color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: '500', marginBottom: 4 },
+  amountBig:    { color: 'white', fontSize: 40, fontWeight: '900', letterSpacing: -1.5 },
+  dueDateTxt:   { color: 'rgba(255,255,255,0.75)', fontSize: 12, marginTop: 4 },
+  lateFeeChip:  { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.15)', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4, marginTop: 6 },
+  lateFeeChipTxt:{ color: '#FEF2F2', fontSize: 11, fontWeight: '600' },
+  strip:        { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 14, padding: 14, marginTop: 18, width: '100%' },
+  stripItem:    { flex: 1, alignItems: 'center' },
+  stripDivider: { width: 1, height: 32, backgroundColor: 'rgba(255,255,255,0.25)' },
+  stripLbl:     { fontSize: 10, color: 'rgba(255,255,255,0.65)', marginBottom: 4, fontWeight: '500' },
+  stripVal:     { fontSize: 14, fontWeight: '700', color: 'white' },
+
+  infoCard:    { backgroundColor: 'white', borderRadius: 18, padding: 18, marginBottom: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 3 },
+  infoHeader:  { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 14 },
+  loanIconWrap:{ width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  infoId:      { fontSize: 11, color: '#9CA3AF', marginBottom: 2, fontWeight: '500' },
+  infoLender:  { fontSize: 16, fontWeight: '800', color: '#1F2937' },
+  infoPurpose: { fontSize: 12, color: '#6B7280', marginTop: 2 },
+  statusPill:  { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },
+  statusDot:   { width: 6, height: 6, borderRadius: 3 },
+  statusTxt:   { fontSize: 11, fontWeight: '700' },
+
+  progressSection:  { marginBottom: 14 },
+  progressTopRow:   { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+  progressBottomRow:{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 5 },
+  progressPct:  { fontSize: 13, fontWeight: '700' },
+  progressNote: { fontSize: 11, color: '#9CA3AF' },
+  track:        { height: 8, backgroundColor: '#E5E7EB', borderRadius: 4, overflow: 'hidden' },
+  trackFill:    { height: '100%', borderRadius: 4 },
+
+  statsRow:  { flexDirection: 'row', backgroundColor: '#F9FAFB', borderRadius: 12, padding: 14, marginBottom: 12 },
+  statItem:  { flex: 1, alignItems: 'center' },
+  statBorder:{ borderLeftWidth: 1, borderLeftColor: '#E5E7EB' },
+  statVal:   { fontSize: 14, fontWeight: '800', marginBottom: 3 },
+  statLbl:   { fontSize: 10, color: '#9CA3AF', fontWeight: '500' },
+
+  expandBtn:    { alignSelf: 'center', paddingVertical: 8, marginTop: 2 },
+  expandBtnTxt: { fontSize: 13, fontWeight: '700' },
+
+  detailsBox:      { backgroundColor: '#F9FAFB', borderRadius: 12, padding: 14, marginTop: 8 },
+  detailSectionLbl:{ fontSize: 11, fontWeight: '700', color: '#9CA3AF', letterSpacing: 0.8, marginBottom: 8, textTransform: 'uppercase' },
+  detailRow:       { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  detailKey:       { fontSize: 12, color: '#6B7280', flex: 1 },
+  detailVal:       { fontSize: 12, fontWeight: '600', color: '#1F2937', textAlign: 'right', flex: 1 },
+
+  payBtn:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 18, borderRadius: 16, marginBottom: 14, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
+  payBtnTxt: { color: 'white', fontSize: 17, fontWeight: '900', letterSpacing: 0.5 },
+
+  tipsCard:   { backgroundColor: '#FFFBEB', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: '#FEF3C7' },
+  tipsHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
+  tipsTitle:  { fontSize: 13, fontWeight: '700', color: '#92400E' },
+  tip:        { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 7 },
+  tipDot:     { width: 5, height: 5, borderRadius: 3, backgroundColor: AMBER, marginTop: 6 },
+  tipTxt:     { fontSize: 12, color: '#78350F', flex: 1, lineHeight: 18 },
+
+  successOverlay:  { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.55)', padding: 20 },
+  successCard:     { backgroundColor: 'white', borderRadius: 24, padding: 24, width: '100%', maxWidth: 380, alignItems: 'center' },
+  successIconWrap: { width: 72, height: 72, borderRadius: 36, justifyContent: 'center', alignItems: 'center', marginBottom: 14 },
+  successTitle:    { fontSize: 21, fontWeight: '900', color: '#1F2937', marginBottom: 6, textAlign: 'center' },
+  successMsg:      { fontSize: 13, color: '#6B7280', textAlign: 'center', lineHeight: 19, marginBottom: 18 },
+  successDetails:  { width: '100%', backgroundColor: '#F9FAFB', borderRadius: 14, padding: 14, marginBottom: 18 },
+  successRow:      { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  successKey:      { fontSize: 12, color: '#6B7280', flex: 1 },
+  successVal:      { fontSize: 12, fontWeight: '600', color: '#1F2937', textAlign: 'right', flex: 1 },
+  successBtns:     { flexDirection: 'row', gap: 10, width: '100%' },
+  successBtnSecondary:    { flex: 1, paddingVertical: 14, backgroundColor: '#F3F4F6', borderRadius: 12, alignItems: 'center' },
+  successBtnSecondaryTxt: { fontWeight: '700', fontSize: 14, color: '#374151' },
+  successBtnPrimary:      { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  successBtnPrimaryTxt:   { color: 'white', fontWeight: '700', fontSize: 14 },
+});
+
+// ─── Styles: PayMethodScreen ──────────────────────────────────────────────────
+const pm = StyleSheet.create({
+  root:      { flex: 1, backgroundColor: '#F5F6FA' },
+  header:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'white', paddingHorizontal: 12, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  headerBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
+  headerTitle:{ fontSize: 16, fontWeight: '700', color: '#1F2937' },
+
+  amtBanner:   { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  amtBannerTxt:{ fontSize: 14, fontWeight: '700' },
+  amtBannerSub:{ fontSize: 11, color: '#9CA3AF', marginTop: 1 },
+
+  catLabel:   { fontSize: 11, fontWeight: '700', color: '#9CA3AF', letterSpacing: 0.8, marginBottom: 8, marginTop: 14, textTransform: 'uppercase' },
+  methodCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1.5, borderColor: '#E5E7EB' },
+  methodIcon: { width: 46, height: 46, borderRadius: 23, justifyContent: 'center', alignItems: 'center' },
+  methodName: { fontSize: 14, fontWeight: '700', color: '#1F2937', marginBottom: 3 },
+  methodDesc: { fontSize: 11, color: '#6B7280' },
+  radioOuter: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: '#D1D5DB', justifyContent: 'center', alignItems: 'center' },
+  radioInner: { width: 10, height: 10, borderRadius: 5 },
+
+  feeBox:     { backgroundColor: '#F9FAFB', borderRadius: 14, padding: 14, marginVertical: 14 },
+  feeRow:     { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 },
+  feeRowTotal:{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderTopWidth: 1, borderTopColor: '#E5E7EB', paddingTop: 10, marginTop: 4 },
+  feeLbl:     { fontSize: 13, color: '#6B7280' },
+  feeVal:     { fontSize: 13, fontWeight: '600', color: '#1F2937' },
+  feeLblBold: { fontSize: 14, fontWeight: '700', color: '#1F2937' },
+  feeValBold: { fontSize: 16, fontWeight: '800' },
+
+  primaryBtn:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, borderRadius: 14, marginTop: 8 },
+  primaryBtnTxt:{ color: 'white', fontSize: 15, fontWeight: '700' },
+
+  procTxt: { marginTop: 16, fontSize: 16, fontWeight: '600', color: '#374151' },
+  procSub: { marginTop: 6,  fontSize: 13, color: '#9CA3AF' },
+
+  instrBox:   { backgroundColor: '#EDE9FE', borderRadius: 14, padding: 14, marginBottom: 14 },
+  instrTitle: { fontSize: 13, fontWeight: '700', color: '#4C1D95', marginBottom: 12 },
+  instrRow:   { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 8 },
+  instrNum:   { width: 22, height: 22, borderRadius: 11, justifyContent: 'center', alignItems: 'center' },
+  instrNumTxt:{ color: 'white', fontSize: 11, fontWeight: '800' },
+  instrTxt:   { fontSize: 13, color: '#374151', flex: 1, lineHeight: 18 },
+
+  qrBox:    { alignItems: 'center', backgroundColor: 'white', borderRadius: 18, padding: 22, marginBottom: 14, borderWidth: 2, borderColor: '#DDD6FE', borderStyle: 'dashed' },
+  qrTxt:    { fontSize: 13, color: '#6B7280', marginTop: 8 },
+  sendToRow:{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 10 },
+  sendToTxt:{ fontSize: 14, fontWeight: '600' },
+  sendAmt:  { fontSize: 24, fontWeight: '900', color: '#1F2937', marginTop: 6, letterSpacing: -0.5 },
+  sendRef:  { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
+
+  bankCard:     { backgroundColor: 'white', borderRadius: 16, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: '#DDD6FE' },
+  bankCardTitle:{ fontSize: 13, fontWeight: '700', color: '#374151', marginBottom: 12, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  bankRow:      { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  bankKey:      { fontSize: 13, color: '#6B7280' },
+  bankVal:      { fontSize: 13, fontWeight: '600', color: '#1F2937' },
+
+  uploadBtn:    { flexDirection: 'row', alignItems: 'center', gap: 8, justifyContent: 'center', borderWidth: 1.5, borderRadius: 12, padding: 14, marginBottom: 10, borderStyle: 'dashed', borderColor: '#DDD6FE', backgroundColor: '#FAFAFF' },
+  uploadBtnDone:{ borderColor: GREEN, backgroundColor: '#F0FDF4' },
+  uploadBtnTxt: { fontWeight: '600', fontSize: 13 },
+  verifyNote:   { fontSize: 12, color: '#9CA3AF', textAlign: 'center', marginBottom: 10 },
+
+  fieldLbl: { fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 6, marginTop: 12 },
+  input:    { backgroundColor: 'white', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, padding: 14, fontSize: 15, color: '#1F2937', marginBottom: 4 },
+  twoCol:   { flexDirection: 'row', gap: 10 },
 });
 
 export default PayNowScreen;
