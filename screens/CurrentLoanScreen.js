@@ -1,1029 +1,799 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Modal,
-  Alert,
+  View, Text, StyleSheet, ScrollView,
+  TouchableOpacity, Modal, Alert, Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
+import LoanStore, { fmtCurrency, getCreditTier } from './Loanstore.js';
 
-// Billing calculation utility - centralized calculation for consistency
-const calculateBillingAmount = (loanData) => {
-  // Parse base monthly payment
-  const basePayment = parseFloat(loanData.monthlyPayment.replace(/[₱,]/g, ''));
-  
-  // Calculate interest for current period
-  const remainingBalance = loanData.remainingBalance;
-  const monthlyInterestRate = loanData.interestRate / 100 / 12;
-  const interestAmount = remainingBalance * monthlyInterestRate;
-  
-  // Calculate principal payment
-  const principalAmount = basePayment - interestAmount;
-  
-  // Check for late fees
-  const dueDate = new Date(loanData.dueDate);
-  const today = new Date();
-  let lateFees = 0;
-  
-  if (today > dueDate) {
-    const daysLate = Math.floor((today - dueDate) / (1000 * 60 * 60 * 24));
-    lateFees = daysLate * 50; // ₱50 per day late fee
-  }
-  
-  // Calculate total amount due
-  const totalAmountDue = basePayment + lateFees;
-  
-  return {
-    basePayment,
-    principalAmount,
-    interestAmount,
-    lateFees,
-    totalAmountDue,
-    daysLate: lateFees > 0 ? Math.floor((today - dueDate) / (1000 * 60 * 60 * 24)) : 0,
-  };
+// ─── Billing Calculator ───────────────────────────────────────────────────────
+const calcBilling = (loan) => {
+  const base        = loan.monthlyPayment;
+  const annualRate  = loan.interestRate / 100;
+  const monthlyRate = annualRate / 12;
+  const interest    = loan.remainingBalance * monthlyRate;
+  const principal   = Math.max(0, base - interest);
+  const dueDate     = new Date(loan.dueDate);
+  const today       = new Date();
+  const daysLate    = today > dueDate ? Math.floor((today - dueDate) / 86400000) : 0;
+  const lateFees    = daysLate * 50;
+  return { base, principal, interest, lateFees, daysLate, total: base + lateFees };
 };
 
+const fmt = fmtCurrency;
+
+// ─── Empty State ─────────────────────────────────────────────────────────────
+const EmptyLoanState = ({ navigation }) => (
+  <SafeAreaView style={s.root} edges={['top']}>
+    <View style={s.header}>
+      <TouchableOpacity onPress={() => navigation.goBack()} style={s.headerBtn}>
+        <MaterialIcons name="arrow-back" size={24} color="#374151" />
+      </TouchableOpacity>
+      <Text style={s.headerTitle}>My Current Loan</Text>
+      <View style={{ width: 40 }} />
+    </View>
+    <View style={s.emptyWrap}>
+      <MaterialIcons name="account-balance" size={64} color="#FFEDD5" />
+      <Text style={s.emptyTitle}>No Active Loan</Text>
+      <Text style={s.emptySub}>You don't have an active loan right now.{'\n'}Apply for a loan to get started.</Text>
+      <TouchableOpacity
+        style={s.emptyBtn}
+        onPress={() => navigation.navigate('LoanApplication')}
+        activeOpacity={0.85}
+      >
+        <MaterialIcons name="add" size={18} color="white" />
+        <Text style={s.emptyBtnTxt}>Apply for a Loan</Text>
+      </TouchableOpacity>
+    </View>
+  </SafeAreaView>
+);
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 const CurrentLoanScreen = ({ navigation }) => {
-  const [showPaymentHistory, setShowPaymentHistory] = useState(false);
-  const [showLoanDetails, setShowLoanDetails] = useState(false);
-  const [daysUntilDue, setDaysUntilDue] = useState(0);
-
-  const loanData = {
-    id: 'LN-2025-001234',
-    amount: '₱150,000.00',
-    terms: '36 months',
-    lender: 'ABC Lending Corp',
-    status: 'Approved',
-    type: 'Personal Loan',
-    date: 'April 1, 2025',
-    monthlyIncome: '₱50,000.00',
-    collateral: 'None',
-    loanAmount: 150000.00,
-    interestRate: 8.5,
-    interestType: 'Reducing Balance',
-    totalInterest: 19125.00,
-    processingFee: 3000.00,
-    monthlyPayment: '₱5,250.00',
-    totalPayment: 169125.00,
-    netRelease: 147000.00,
-    remainingBalance: 132000.00,
-    paidAmount: 18000.00,
-    nextDueDate: 'August 5, 2025',
-    loanTerm: 36,
-    paymentsCompleted: 4,
-    paymentsRemaining: 32,
-    loanStartDate: 'April 1, 2025',
-    loanEndDate: 'April 1, 2028',
-    dueDate: 'August 5, 2025',
-  };
-
-  const paymentHistory = [
-    {
-      id: 1,
-      date: 'July 5, 2025',
-      amount: 5250.00,
-      principal: 4000.00,
-      interest: 1250.00,
-      status: 'Completed',
-      paymentMethod: 'Wallet',
-    },
-    {
-      id: 2,
-      date: 'June 5, 2025',
-      amount: 5250.00,
-      principal: 3950.00,
-      interest: 1300.00,
-      status: 'Completed',
-      paymentMethod: 'Bank Transfer',
-    },
-    {
-      id: 3,
-      date: 'May 5, 2025',
-      amount: 5250.00,
-      principal: 3900.00,
-      interest: 1350.00,
-      status: 'Completed',
-      paymentMethod: 'Wallet',
-    },
-    {
-      id: 4,
-      date: 'April 5, 2025',
-      amount: 7000.00,
-      principal: 5750.00,
-      interest: 1250.00,
-      status: 'Completed',
-      paymentMethod: 'GCash',
-    },
-  ];
-
-  // Calculate billing info using the centralized method
-  const billingInfo = calculateBillingAmount(loanData);
+  // ── Reactive store reads ──────────────────────────────────────────────────
+  const [, forceUpdate]     = useState(0);
+  const rawLoan             = LoanStore.getActiveLoan();
 
   useEffect(() => {
-    calculateDaysUntilDue();
+    const listener = () => forceUpdate(n => n + 1);
+    LoanStore.subscribe(listener);
+    return () => LoanStore.unsubscribe(listener);
   }, []);
 
-  const calculateProgress = () => {
-    return (loanData.paidAmount / loanData.loanAmount) * 100;
+  // ── Local UI state ────────────────────────────────────────────────────────
+  const [showHistory,     setShowHistory]     = useState(false);
+  const [showDetails,     setShowDetails]     = useState(false);
+  const [daysUntilDue,    setDaysUntilDue]    = useState(0);
+  const [expandedPayment, setExpandedPayment] = useState(null);
+  const [showAmort,       setShowAmort]       = useState(false);
+  const progressAnim = useRef(new Animated.Value(0)).current;
+
+  // ── No active loan — show empty state ─────────────────────────────────────
+  if (!rawLoan) return <EmptyLoanState navigation={navigation} />;
+
+  // ── Normalise loan into the shape this screen expects ────────────────────
+  const creditTier = getCreditTier(rawLoan.creditScore || 200);
+  const loan = {
+    id:               rawLoan.id,
+    type:             rawLoan.type,
+    lender:           rawLoan.lender,
+    status:           rawLoan.status,
+    date:             rawLoan.applicationDate,
+    loanStartDate:    rawLoan.loanStartDate,
+    loanEndDate:      rawLoan.loanEndDate,
+    dueDate:          rawLoan.dueDate,
+    nextDueDate:      rawLoan.nextDueDate,
+    loanAmount:       rawLoan.amount,
+    remainingBalance: rawLoan.remainingBalance,
+    paidAmount:       rawLoan.paidAmount,
+    monthlyPayment:   rawLoan.monthlyPayment,
+    terms:            `${rawLoan.term} months`,
+    loanTerm:         rawLoan.term,
+    paymentsCompleted: rawLoan.paymentsCompleted,
+    paymentsRemaining: rawLoan.paymentsRemaining,
+    interestRate:     rawLoan.interestRate,
+    interestType:     rawLoan.interestType,
+    totalInterest:    rawLoan.totalInterest,
+    processingFee:    rawLoan.processingFee,
+    totalPayment:     rawLoan.totalPayable,
+    netRelease:       rawLoan.netRelease,
+    monthlyIncome:    rawLoan.monthlyIncome,
+    collateral:       rawLoan.collateral,
+    purpose:          rawLoan.purpose,
+    officerName:      rawLoan.officerName,
+    officerContact:   rawLoan.officerContact,
+    branchName:       rawLoan.branchName,
+    branchAddress:    rawLoan.branchAddress,
+    creditScore:      rawLoan.creditScore,
+    tierLabel:        creditTier.label,
+    tierColor:        creditTier.color,
+    tierMaxLoan:      creditTier.maxLoan,
   };
 
-  const calculateDaysUntilDue = () => {
-    const dueDate = new Date('2025-08-05');
+  // ── Payment history from LoanStore ───────────────────────────────────────
+  const txns = LoanStore.getTransactions(rawLoan.id);
+  const history = txns
+    .filter(t => t.type === 'Payment')
+    .map((t, i) => ({
+      id:        i + 1,
+      date:      t.date,
+      amount:    t.amountNum,
+      principal: t.principal,
+      interest:  t.interest,
+      status:    'Completed',
+      method:    t.paymentMethod,
+      ref:       t.transactionId,
+    }));
+
+  const billing  = calcBilling(loan);
+  const isUrgent = daysUntilDue <= 7 || billing.daysLate > 0;
+  const progress = loan.loanAmount > 0 ? (loan.paidAmount / loan.loanAmount) * 100 : 0;
+
+  useEffect(() => {
+    const due   = new Date(loan.dueDate);
     const today = new Date();
-    const diffTime = dueDate - today;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    setDaysUntilDue(diffDays);
-  };
+    setDaysUntilDue(Math.max(0, Math.ceil((due - today) / 86400000)));
+  }, [loan.dueDate]);
 
-  const goToPayNow = () => {
-    // Pass complete billing info to PayNow screen
-    // This ensures the amount shown here matches exactly what PayNow will display
+  useEffect(() => {
+    Animated.timing(progressAnim, {
+      toValue: progress,
+      duration: 900,
+      useNativeDriver: false,
+    }).start();
+  }, [progress]);
+
+  const progressWidth = progressAnim.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] });
+
+  const goToPayNow = () =>
     navigation.navigate('PayNow', {
-      loanApplication: {
-        ...loanData,
-        // Add the actual amount due for PayNow to use directly
-        actualAmountDue: billingInfo.totalAmountDue,
+      loanApplication: { ...loan, amount: fmt(loan.loanAmount), actualAmountDue: billing.total },
+      billingInfo: {
+        basePayment: billing.base, principalAmount: billing.principal,
+        interestAmount: billing.interest, lateFees: billing.lateFees,
+        totalAmountDue: billing.total, daysLate: billing.daysLate,
       },
       transactions: [],
-      billingInfo: {
-        basePayment: billingInfo.basePayment,
-        principalAmount: billingInfo.principalAmount,
-        interestAmount: billingInfo.interestAmount,
-        lateFees: billingInfo.lateFees,
-        totalAmountDue: billingInfo.totalAmountDue,
-        daysLate: billingInfo.daysLate,
-      },
     });
-  };
 
-  const handleContactSupport = () => {
-    Alert.alert(
-      'Contact Support',
-      'Choose how you would like to reach us:',
-      [
-        { 
-          text: 'Call Us', 
-          onPress: () => Alert.alert('Calling', '1-800-LOAN-HELP')
-        },
-        { 
-          text: 'Email', 
-          onPress: () => Alert.alert('Email', 'support@abclending.com')
-        },
-        { 
-          text: 'Live Chat', 
-          onPress: () => Alert.alert('Chat', 'Opening live chat...') 
-        },
-        { text: 'Cancel', style: 'cancel' }
-      ]
-    );
-  };
+  const goToTransactions = () =>
+    navigation.navigate('Transactions', {
+      loanId:       loan.id,
+      loanType:     loan.type,
+      transactions: LoanStore.getTransactions(loan.id),
+    });
 
-  const isUrgent = daysUntilDue <= 7 || billingInfo.lateFees > 0;
+  const handleContactSupport = () =>
+    Alert.alert('Contact Support', 'Choose how to reach us:', [
+      { text: 'Call',      onPress: () => Alert.alert('Calling', '1-800-LOAN-HELP') },
+      { text: 'Email',     onPress: () => Alert.alert('Email', 'support@lorafinance.com') },
+      { text: 'Live Chat', onPress: () => Alert.alert('Chat', 'Opening live chat...') },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+
+  const DRow = ({ label, value, accent, borderless }) => (
+    <View style={[s.dRow, borderless ? { borderBottomWidth: 0 } : null]}>
+      <Text style={s.dKey}>{label}</Text>
+      <Text style={[s.dVal, accent ? { color: accent, fontWeight: '700' } : null]}>{value}</Text>
+    </View>
+  );
+
+  // Build simple amortization schedule
+  const amortRows = (() => {
+    const monthlyRate = (loan.interestRate / 100) / 12;
+    const base = loan.monthlyPayment;
+    let bal = loan.loanAmount;
+    const rows = [];
+    for (let i = 1; i <= loan.loanTerm; i++) {
+      const interest  = bal * monthlyRate;
+      const principal = base - interest;
+      bal = Math.max(0, bal - principal);
+      rows.push({ num: i, principal: principal.toFixed(2), interest: interest.toFixed(2), balance: bal.toFixed(2) });
+    }
+    return rows;
+  })();
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+    <SafeAreaView style={s.root} edges={['top']}>
+
+      {/* ── Header ── */}
+      <View style={s.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={s.headerBtn}>
           <MaterialIcons name="arrow-back" size={24} color="#374151" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Loan</Text>
-        <TouchableOpacity onPress={() => setShowLoanDetails(true)}>
-          <MaterialIcons name="info-outline" size={24} color="#8B5CF6" />
-        </TouchableOpacity>
+        <Text style={s.headerTitle}>My Current Loan</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TouchableOpacity onPress={goToTransactions} style={s.headerBtn}>
+            <MaterialIcons name="receipt-long" size={24} color="#FB923C" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowDetails(true)} style={s.headerBtn}>
+            <MaterialIcons name="info-outline" size={24} color="#FB923C" />
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
-        {/* Urgent Payment Alert */}
+      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+
+        {/* ── Credit Tier Banner ── */}
+        <TouchableOpacity
+          style={[s.tierBanner, { backgroundColor: loan.tierColor + '12', borderColor: loan.tierColor + '40' }]}
+          onPress={() => navigation.navigate('CreditReport')}
+          activeOpacity={0.8}
+        >
+          <View style={[s.tierIconBox, { backgroundColor: loan.tierColor + '20' }]}>
+            <MaterialIcons name="star" size={18} color={loan.tierColor} />
+          </View>
+          <View style={{ flex: 1, marginLeft: 10 }}>
+            <Text style={[s.tierBannerTitle, { color: loan.tierColor }]}>
+              {loan.tierLabel} Tier · Score {loan.creditScore}
+            </Text>
+            <Text style={s.tierBannerSub}>
+              Max loan limit: {fmt(loan.tierMaxLoan)} · Approved within your tier
+            </Text>
+          </View>
+          <MaterialIcons name="chevron-right" size={22} color={loan.tierColor} />
+        </TouchableOpacity>
+
+        {/* ── Urgent alert ── */}
         {isUrgent && (
-          <View style={styles.urgentAlert}>
-            <MaterialIcons name="warning" size={24} color="#F97316" />
-            <View style={styles.urgentTextContainer}>
-              <Text style={styles.urgentTitle}>
-                {billingInfo.lateFees > 0 ? 'Payment Overdue!' : 'Payment Due Soon!'}
+          <View style={[s.alertBanner, billing.daysLate > 0 ? s.alertBannerRed : s.alertBannerOrange]}>
+            <MaterialIcons name={billing.daysLate > 0 ? 'error' : 'warning'} size={22} color={billing.daysLate > 0 ? '#DC2626' : '#F97316'} />
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <Text style={[s.alertTitle, { color: billing.daysLate > 0 ? '#DC2626' : '#B45309' }]}>
+                {billing.daysLate > 0 ? 'Payment Overdue!' : 'Payment Due Soon!'}
               </Text>
-              <Text style={styles.urgentText}>
-                {billingInfo.lateFees > 0 
-                  ? `${billingInfo.daysLate} days overdue. Late fee: ₱${billingInfo.lateFees.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
-                  : `${daysUntilDue} ${daysUntilDue === 1 ? 'day' : 'days'} remaining to avoid late fees`
-                }
+              <Text style={[s.alertMsg, { color: billing.daysLate > 0 ? '#7F1D1D' : '#92400E' }]}>
+                {billing.daysLate > 0
+                  ? `${billing.daysLate} days overdue · Late fee: ${fmt(billing.lateFees)}`
+                  : `${daysUntilDue} day${daysUntilDue !== 1 ? 's' : ''} remaining to avoid late fees`}
               </Text>
             </View>
           </View>
         )}
 
-        {/* Main Balance Card */}
-        <View style={styles.balanceCard}>
-          <View style={styles.balanceHeader}>
+        {/* ── Balance card ── */}
+        <View style={s.balanceCard}>
+          <View style={s.balanceTop}>
             <View>
-              <Text style={styles.balanceLabel}>Remaining Balance</Text>
-              <Text style={styles.balanceAmount}>
-                ₱{loanData.remainingBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-              </Text>
+              <Text style={s.balanceLbl}>Remaining Balance</Text>
+              <Text style={s.balanceAmt}>{fmt(loan.remainingBalance)}</Text>
             </View>
-            <View style={[styles.statusBadge, styles.activeStatus]}>
-              <MaterialIcons name="check-circle" size={16} color="#059669" />
-              <Text style={styles.statusText}>Active</Text>
+            <View style={s.activePill}>
+              <MaterialIcons name="check-circle" size={14} color="#059669" />
+              <Text style={s.activePillTxt}>Active</Text>
             </View>
           </View>
 
-          {/* Visual Progress */}
-          <View style={styles.progressContainer}>
-            <View style={styles.progressInfo}>
-              <View style={styles.progressItem}>
-                <Text style={styles.progressValue}>
-                  {loanData.paymentsCompleted}
-                </Text>
-                <Text style={styles.progressLabel}>Paid</Text>
+          <View style={s.progressSection}>
+            <View style={s.progressNumbers}>
+              <View style={s.progressStat}>
+                <Text style={s.progressStatNum}>{loan.paymentsCompleted}</Text>
+                <Text style={s.progressStatLbl}>Paid</Text>
               </View>
-              <View style={styles.progressBarWrapper}>
-                <View style={styles.progressBar}>
-                  <View
-                    style={[styles.progressFill, { width: `${calculateProgress()}%` }]}
-                  />
+              <View style={s.progressBarWrap}>
+                <View style={s.progressTrack}>
+                  <Animated.View style={[s.progressFill, { width: progressWidth }]} />
                 </View>
-                <Text style={styles.progressPercentage}>
-                  {calculateProgress().toFixed(0)}% Complete
-                </Text>
+                <Text style={s.progressPct}>{progress.toFixed(0)}% Complete</Text>
               </View>
-              <View style={styles.progressItem}>
-                <Text style={styles.progressValue}>
-                  {loanData.paymentsRemaining}
-                </Text>
-                <Text style={styles.progressLabel}>Remaining</Text>
+              <View style={s.progressStat}>
+                <Text style={s.progressStatNum}>{loan.paymentsRemaining}</Text>
+                <Text style={s.progressStatLbl}>Remaining</Text>
               </View>
             </View>
           </View>
 
-          <View style={styles.amountBreakdown}>
-            <View style={styles.breakdownItem}>
-              <Text style={styles.breakdownLabel}>Original Amount</Text>
-              <Text style={styles.breakdownValue}>
-                ₱{loanData.loanAmount.toLocaleString()}
-              </Text>
+          <View style={s.paidRow}>
+            <View style={s.paidItem}>
+              <Text style={s.paidLbl}>Original Amount</Text>
+              <Text style={s.paidVal}>{fmt(loan.loanAmount)}</Text>
             </View>
-            <View style={styles.breakdownDivider} />
-            <View style={styles.breakdownItem}>
-              <Text style={styles.breakdownLabel}>Amount Paid</Text>
-              <Text style={styles.breakdownValuePaid}>
-                ₱{loanData.paidAmount.toLocaleString()}
-              </Text>
+            <View style={s.paidDivider} />
+            <View style={s.paidItem}>
+              <Text style={s.paidLbl}>Amount Paid</Text>
+              <Text style={[s.paidVal, { color: '#10B981' }]}>{fmt(loan.paidAmount)}</Text>
+            </View>
+            <View style={s.paidDivider} />
+            <View style={s.paidItem}>
+              <Text style={s.paidLbl}>Monthly Left</Text>
+              <Text style={[s.paidVal, { color: '#F97316' }]}>{loan.paymentsRemaining} mo</Text>
             </View>
           </View>
         </View>
 
-        {/* Next Payment Card - Shows exact amount user will pay */}
-        <View style={[styles.paymentCard, isUrgent && styles.paymentCardUrgent]}>
-          <View style={styles.paymentRow}>
-            <View style={styles.paymentLeft}>
-              <View style={styles.paymentIconContainer}>
-                <MaterialIcons 
-                  name="calendar-today" 
-                  size={24} 
-                  color={isUrgent ? "#F97316" : "#8B5CF6"} 
-                />
+        {/* ── Next payment card ── */}
+        <View style={[s.payCard, isUrgent ? s.payCardUrgent : null]}>
+          <View style={s.payCardTop}>
+            <View style={s.payCardLeft}>
+              <View style={[s.payCardIcon, { backgroundColor: isUrgent ? '#FEF3C7' : '#FFF7ED' }]}>
+                <MaterialIcons name="calendar-today" size={24} color={isUrgent ? '#F97316' : '#FB923C'} />
               </View>
               <View>
-                <Text style={styles.paymentLabel}>Next Payment</Text>
-                <Text style={styles.paymentDateText}>{loanData.nextDueDate}</Text>
-                <Text style={[styles.paymentDaysText, isUrgent && styles.paymentDaysTextUrgent]}>
+                <Text style={s.payCardLbl}>Next Payment</Text>
+                <Text style={s.payCardDate}>{loan.nextDueDate}</Text>
+                <Text style={[s.payCardDays, { color: isUrgent ? '#F97316' : '#FB923C' }]}>
                   {daysUntilDue > 0 ? `${daysUntilDue} days remaining` : 'Due today!'}
                 </Text>
               </View>
             </View>
-            <View style={styles.paymentRight}>
-              <Text style={[styles.paymentAmountLarge, isUrgent && styles.paymentAmountUrgent]}>
-                ₱{billingInfo.totalAmountDue.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            <View style={s.payCardRight}>
+              <Text style={[s.payCardAmt, { color: isUrgent ? '#F97316' : '#FB923C' }]}>
+                {fmt(billing.total)}
               </Text>
-              {billingInfo.lateFees > 0 && (
-                <Text style={styles.paymentNote}>
-                  Includes ₱{billingInfo.lateFees.toFixed(2)} late fee
-                </Text>
+              {billing.lateFees > 0 && (
+                <Text style={s.payCardNote}>+{fmt(billing.lateFees)} late fee</Text>
               )}
             </View>
           </View>
-          
+
+          <View style={s.payBreakdown}>
+            {[
+              ['Principal', fmt(billing.principal)],
+              ['Interest',  fmt(billing.interest)],
+              billing.lateFees > 0 ? ['Late Fee', fmt(billing.lateFees)] : null,
+            ].filter(Boolean).map(([k, v]) => (
+              <View key={k} style={s.payBreakdownItem}>
+                <Text style={s.payBreakdownLbl}>{k}</Text>
+                <Text style={[s.payBreakdownVal, k === 'Late Fee' ? { color: '#DC2626' } : null]}>{v}</Text>
+              </View>
+            ))}
+          </View>
+
           <TouchableOpacity
-            style={[styles.payNowButton, isUrgent && styles.payNowButtonUrgent]}
+            style={[s.payBtn, isUrgent ? s.payBtnUrgent : null]}
             onPress={goToPayNow}
+            activeOpacity={0.85}
           >
             <MaterialIcons name="payment" size={20} color="white" />
-            <Text style={styles.payNowButtonText}>Pay Now</Text>
+            <Text style={s.payBtnTxt}>Pay Now — {fmt(billing.total)}</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Recent Payments */}
-        <View style={styles.historyCard}>
-          <View style={styles.historyHeader}>
-            <Text style={styles.sectionTitle}>Recent Payments</Text>
-            <TouchableOpacity onPress={() => setShowPaymentHistory(true)}>
-              <Text style={styles.viewAllText}>View All →</Text>
-            </TouchableOpacity>
+        {/* ── Loan summary grid ── */}
+        <View style={s.summaryCard}>
+          <Text style={s.cardTitle}>Loan Summary</Text>
+          <View style={s.summaryGrid}>
+            {[
+              { label: 'Loan ID',         value: loan.id,                     wide: true  },
+              { label: 'Lender',          value: loan.lender,                 wide: true  },
+              { label: 'Loan Amount',     value: fmt(loan.loanAmount)                     },
+              { label: 'Interest Rate',   value: `${loan.interestRate}% / mo`             },
+              { label: 'Net Release',     value: fmt(loan.netRelease)                     },
+              { label: 'Processing Fee',  value: fmt(loan.processingFee)                  },
+              { label: 'Total Interest',  value: fmt(loan.totalInterest)                  },
+              { label: 'Total Payable',   value: fmt(loan.totalPayment)                   },
+              { label: 'Monthly Payment', value: fmt(loan.monthlyPayment), accent: '#FB923C' },
+              { label: 'Interest Type',   value: loan.interestType                        },
+              { label: 'Term',            value: loan.terms                               },
+              { label: 'Start Date',      value: loan.loanStartDate                       },
+              { label: 'End Date',        value: loan.loanEndDate                         },
+              { label: 'Purpose',         value: loan.purpose,               wide: true   },
+              { label: 'Collateral',      value: loan.collateral,            wide: true   },
+            ].map(({ label, value, wide, accent }) => (
+              <View key={label} style={[s.summaryCell, wide ? s.summaryCellFull : null]}>
+                <Text style={s.summaryCellLbl}>{label}</Text>
+                <Text style={[s.summaryCellVal, accent ? { color: accent } : null]}>{value}</Text>
+              </View>
+            ))}
           </View>
 
-          {paymentHistory.slice(0, 3).map((payment) => (
-            <View key={payment.id} style={styles.historyItem}>
-              <View style={styles.historyIconWrapper}>
-                <MaterialIcons name="check-circle" size={24} color="#10B981" />
+          {/* Amortization toggle */}
+          <TouchableOpacity style={s.amortBtn} onPress={() => setShowAmort(v => !v)}>
+            <MaterialIcons name="table-chart" size={16} color="#FB923C" />
+            <Text style={s.amortBtnTxt}>{showAmort ? 'Hide' : 'View'} Amortization Schedule</Text>
+            <MaterialIcons name={showAmort ? 'keyboard-arrow-up' : 'keyboard-arrow-down'} size={18} color="#FB923C" />
+          </TouchableOpacity>
+
+          {showAmort && (
+            <View style={s.amortTable}>
+              <View style={[s.amortRow, s.amortHeader]}>
+                {['Mo.', 'Principal', 'Interest', 'Balance'].map(h => (
+                  <Text key={h} style={s.amortHeaderTxt}>{h}</Text>
+                ))}
               </View>
-              <View style={styles.historyContent}>
-                <Text style={styles.historyDate}>{payment.date}</Text>
-                <Text style={styles.historyMethod}>via {payment.paymentMethod}</Text>
+              {amortRows.map((r, i) => (
+                <View key={i} style={[s.amortRow, i < loan.paymentsCompleted ? s.amortRowPaid : null, i % 2 === 0 ? { backgroundColor: '#F9FAFB' } : null]}>
+                  <Text style={[s.amortCell, { color: i < loan.paymentsCompleted ? '#10B981' : '#1F2937', fontWeight: i < loan.paymentsCompleted ? '700' : '500' }]}>{r.num}</Text>
+                  <Text style={s.amortCell}>₱{parseFloat(r.principal).toLocaleString('en-PH', { minimumFractionDigits: 0 })}</Text>
+                  <Text style={[s.amortCell, { color: '#EF4444' }]}>₱{parseFloat(r.interest).toLocaleString('en-PH', { minimumFractionDigits: 0 })}</Text>
+                  <Text style={[s.amortCell, { color: '#FB923C', fontWeight: '600' }]}>₱{parseFloat(r.balance).toLocaleString('en-PH', { minimumFractionDigits: 0 })}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+
+        {/* ── Recent payments ── */}
+        <View style={s.histCard}>
+          <View style={s.histCardHeader}>
+            <Text style={s.cardTitle}>Recent Payments</Text>
+            {history.length > 0 && (
+              <TouchableOpacity onPress={() => setShowHistory(true)}>
+                <Text style={s.viewAll}>View All →</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          {history.length === 0 ? (
+            <View style={s.noPayWrap}>
+              <MaterialIcons name="pending-actions" size={32} color="#FFEDD5" />
+              <Text style={s.noPayTxt}>No payments yet</Text>
+            </View>
+          ) : (
+            history.slice(0, 3).map((p) => (
+              <View key={p.id} style={s.histRow}>
+                <View style={s.histIconWrap}>
+                  <MaterialIcons name="check-circle" size={22} color="#10B981" />
+                </View>
+                <View style={s.histMid}>
+                  <Text style={s.histDate}>{p.date}</Text>
+                  <Text style={s.histMethod}>via {p.method}</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={s.histAmt}>{fmt(p.amount)}</Text>
+                  <View style={s.completedPill}>
+                    <Text style={s.completedPillTxt}>Completed</Text>
+                  </View>
+                </View>
               </View>
-              <View style={styles.historyRight}>
-                <Text style={styles.historyAmount}>
-                  ₱{payment.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </Text>
-              </View>
+            ))
+          )}
+        </View>
+
+        {/* ── Transactions shortcut ── */}
+        <TouchableOpacity style={s.txShortcut} onPress={goToTransactions} activeOpacity={0.85}>
+          <MaterialIcons name="receipt-long" size={20} color="#FB923C" />
+          <Text style={s.txShortcutTxt}>View All Transactions for This Loan</Text>
+          <MaterialIcons name="chevron-right" size={20} color="#FB923C" />
+        </TouchableOpacity>
+
+        {/* ── Loan officer ── */}
+        <View style={s.officerCard}>
+          <Text style={s.cardTitle}>Loan Officer</Text>
+          <View style={s.officerRow}>
+            <View style={s.officerAvatar}>
+              <MaterialIcons name="person" size={28} color="#FB923C" />
+            </View>
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={s.officerName}>{loan.officerName}</Text>
+              <Text style={s.officerBranch}>{loan.branchName}</Text>
+              <Text style={s.officerAddr}>{loan.branchAddress}</Text>
+            </View>
+          </View>
+          <TouchableOpacity style={s.contactBtn} onPress={handleContactSupport}>
+            <MaterialIcons name="support-agent" size={18} color="#FB923C" />
+            <Text style={s.contactBtnTxt}>Contact Support</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* ── Tips ── */}
+        <View style={s.tipsCard}>
+          <View style={s.tipsHeader}>
+            <MaterialIcons name="lightbulb" size={18} color="#F59E0B" />
+            <Text style={s.tipsTitle}>Helpful Tips</Text>
+          </View>
+          {[
+            'Pay early to reduce your interest charges.',
+            'Set a calendar reminder 5 days before due date.',
+            'Contact support if you need a payment plan adjustment.',
+            'Paying on time improves your credit score by +20 pts.',
+          ].map((tip, i) => (
+            <View key={i} style={s.tip}>
+              <Text style={s.tipBullet}>•</Text>
+              <Text style={s.tipTxt}>{tip}</Text>
             </View>
           ))}
         </View>
 
-        {/* Helpful Tips */}
-        <View style={styles.tipsCard}>
-          <View style={styles.tipsHeader}>
-            <MaterialIcons name="lightbulb" size={20} color="#F59E0B" />
-            <Text style={styles.tipsTitle}>Helpful Tips</Text>
-          </View>
-          <View style={styles.tipItem}>
-            <Text style={styles.tipBullet}>•</Text>
-            <Text style={styles.tipText}>
-              Set up auto-pay to never miss a payment
-            </Text>
-          </View>
-          <View style={styles.tipItem}>
-            <Text style={styles.tipBullet}>•</Text>
-            <Text style={styles.tipText}>
-              Pay early to reduce your interest charges
-            </Text>
-          </View>
-          <View style={styles.tipItem}>
-            <Text style={styles.tipBullet}>•</Text>
-            <Text style={styles.tipText}>
-              Contact support if you need payment assistance
-            </Text>
-          </View>
-        </View>
       </ScrollView>
 
-      {/* Payment History Modal */}
-      <Modal
-        visible={showPaymentHistory}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={() => setShowPaymentHistory(false)}
-      >
-        <SafeAreaView style={styles.container}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={() => setShowPaymentHistory(false)}>
-              <MaterialIcons name="close" size={24} color="#374151" />
+      {/* ══════════════════════════════════════════════════════════════════ */}
+      {/* Payment History Modal                                             */}
+      {/* ══════════════════════════════════════════════════════════════════ */}
+      <Modal visible={showHistory} animationType="slide" onRequestClose={() => setShowHistory(false)}>
+        <SafeAreaView style={s.root}>
+          <View style={s.header}>
+            <TouchableOpacity onPress={() => setShowHistory(false)} style={s.headerBtn}>
+              <MaterialIcons name="arrow-back" size={24} color="#374151" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Payment History</Text>
-            <View style={{ width: 24 }} />
+            <Text style={s.headerTitle}>Payment History</Text>
+            <View style={{ width: 40 }} />
           </View>
 
-          <ScrollView style={styles.modalContent}>
-            <View style={styles.historySummary}>
-              <Text style={styles.historySummaryLabel}>Total Paid</Text>
-              <Text style={styles.historySummaryAmount}>
-                ₱{loanData.paidAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-              </Text>
-              <Text style={styles.historySummarySubtext}>
-                {loanData.paymentsCompleted} payments completed
-              </Text>
-            </View>
+          <View style={s.histSummary}>
+            <Text style={s.histSummaryLbl}>Total Paid</Text>
+            <Text style={s.histSummaryAmt}>{fmt(loan.paidAmount)}</Text>
+            <Text style={s.histSummarySub}>{`${loan.paymentsCompleted} payments completed out of ${loan.loanTerm}`}</Text>
+          </View>
 
-            {paymentHistory.map((payment) => (
-              <View key={payment.id} style={styles.fullHistoryItem}>
-                <View style={styles.fullHistoryHeader}>
-                  <View style={styles.fullHistoryLeft}>
-                    <MaterialIcons name="check-circle" size={24} color="#10B981" />
-                    <View style={styles.fullHistoryInfo}>
-                      <Text style={styles.fullHistoryDate}>{payment.date}</Text>
-                      <Text style={styles.fullHistoryMethod}>
-                        via {payment.paymentMethod}
-                      </Text>
+          <ScrollView contentContainerStyle={{ padding: 16 }}>
+            {history.map((p) => (
+              <TouchableOpacity
+                key={p.id}
+                style={s.fullHistItem}
+                onPress={() => setExpandedPayment(expandedPayment === p.id ? null : p.id)}
+              >
+                <View style={s.fullHistTop}>
+                  <View style={s.fullHistLeft}>
+                    <View style={s.fullHistIconBox}>
+                      <MaterialIcons name="check-circle" size={22} color="#10B981" />
+                    </View>
+                    <View>
+                      <Text style={s.fullHistDate}>{p.date}</Text>
+                      <Text style={s.fullHistMethod}>via {p.method}</Text>
+                      <Text style={s.fullHistRef}>Ref: {p.ref}</Text>
                     </View>
                   </View>
-                  <Text style={styles.fullHistoryTotal}>
-                    ₱{payment.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </Text>
-                </View>
-                
-                <View style={styles.paymentBreakdown}>
-                  <View style={styles.breakdownRow}>
-                    <Text style={styles.breakdownLabelDetail}>Principal Payment</Text>
-                    <Text style={styles.breakdownAmount}>
-                      ₱{payment.principal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                    </Text>
-                  </View>
-                  <View style={styles.breakdownRow}>
-                    <Text style={styles.breakdownLabelDetail}>Interest Payment</Text>
-                    <Text style={styles.breakdownAmount}>
-                      ₱{payment.interest.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                    </Text>
+                  <View style={s.fullHistRight}>
+                    <Text style={s.fullHistAmt}>{fmt(p.amount)}</Text>
+                    <MaterialIcons name={expandedPayment === p.id ? 'expand-less' : 'expand-more'} size={18} color="#9CA3AF" />
                   </View>
                 </View>
-              </View>
+                {expandedPayment === p.id && (
+                  <View style={s.expandedBreakdown}>
+                    <View style={s.expandRow}>
+                      <Text style={s.expandLbl}>Principal</Text>
+                      <Text style={s.expandVal}>{fmt(p.principal)}</Text>
+                    </View>
+                    <View style={s.expandRow}>
+                      <Text style={s.expandLbl}>Interest</Text>
+                      <Text style={[s.expandVal, { color: '#EF4444' }]}>{fmt(p.interest)}</Text>
+                    </View>
+                    <View style={[s.expandRow, { borderTopWidth: 1, borderTopColor: '#E5E7EB', marginTop: 4, paddingTop: 8 }]}>
+                      <Text style={[s.expandLbl, { fontWeight: '700', color: '#1F2937' }]}>Total</Text>
+                      <Text style={[s.expandVal, { fontWeight: '700', color: '#FB923C' }]}>{fmt(p.amount)}</Text>
+                    </View>
+                    <View style={s.statusPill}>
+                      <MaterialIcons name="check-circle" size={13} color="#059669" />
+                      <Text style={s.statusPillTxt}>{p.status}</Text>
+                    </View>
+                  </View>
+                )}
+              </TouchableOpacity>
             ))}
           </ScrollView>
         </SafeAreaView>
       </Modal>
 
-      {/* Loan Details Modal */}
-      <Modal
-        visible={showLoanDetails}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={() => setShowLoanDetails(false)}
-      >
-        <SafeAreaView style={styles.container}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={() => setShowLoanDetails(false)}>
-              <MaterialIcons name="close" size={24} color="#374151" />
+      {/* ══════════════════════════════════════════════════════════════════ */}
+      {/* Loan Details Modal                                                */}
+      {/* ══════════════════════════════════════════════════════════════════ */}
+      <Modal visible={showDetails} animationType="slide" onRequestClose={() => setShowDetails(false)}>
+        <SafeAreaView style={s.root}>
+          <View style={s.header}>
+            <TouchableOpacity onPress={() => setShowDetails(false)} style={s.headerBtn}>
+              <MaterialIcons name="arrow-back" size={24} color="#374151" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Loan Details</Text>
-            <View style={{ width: 24 }} />
+            <Text style={s.headerTitle}>Loan Details</Text>
+            <View style={{ width: 40 }} />
           </View>
 
-          <ScrollView style={styles.modalContent}>
-            <View style={styles.detailsSection}>
-              <Text style={styles.detailsSectionTitle}>Basic Information</Text>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Loan ID</Text>
-                <Text style={styles.detailValue}>{loanData.id}</Text>
+          <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+            {[
+              {
+                title: 'Basic Information',
+                rows: [
+                  ['Loan ID',          loan.id],
+                  ['Lender',           loan.lender],
+                  ['Loan Type',        loan.type],
+                  ['Status',           loan.status, '#10B981'],
+                  ['Application Date', loan.date],
+                ],
+              },
+              {
+                title: 'Financial Terms',
+                rows: [
+                  ['Loan Amount',     fmt(loan.loanAmount), '#FB923C'],
+                  ['Net Release',     fmt(loan.netRelease)],
+                  ['Processing Fee',  fmt(loan.processingFee)],
+                  ['Interest Rate',   `${loan.interestRate}% / month`],
+                  ['Interest Type',   loan.interestType],
+                  ['Total Interest',  fmt(loan.totalInterest)],
+                  ['Total Payable',   fmt(loan.totalPayment)],
+                  ['Monthly Payment', fmt(loan.monthlyPayment), '#FB923C'],
+                ],
+              },
+              {
+                title: 'Payment Status',
+                rows: [
+                  ['Remaining Balance',  fmt(loan.remainingBalance), '#EF4444'],
+                  ['Amount Paid',        fmt(loan.paidAmount), '#10B981'],
+                  ['Payments Completed', `${loan.paymentsCompleted} of ${loan.loanTerm}`],
+                  ['Payments Remaining', `${loan.paymentsRemaining}`],
+                  ['Current Amount Due', fmt(billing.total), '#FB923C'],
+                  ...(billing.lateFees > 0 ? [[`Late Fee (${billing.daysLate} days)`, fmt(billing.lateFees), '#DC2626']] : []),
+                ],
+              },
+              {
+                title: 'Important Dates',
+                rows: [
+                  ['Start Date',    loan.loanStartDate],
+                  ['Next Due Date', loan.nextDueDate, '#F59E0B'],
+                  ['End Date',      loan.loanEndDate],
+                ],
+              },
+              {
+                title: 'Loan Purpose & Collateral',
+                rows: [
+                  ['Purpose',        loan.purpose],
+                  ['Collateral',     loan.collateral],
+                  ['Monthly Income', loan.monthlyIncome],
+                ],
+              },
+              {
+                title: 'Branch Information',
+                rows: [
+                  ['Officer',  loan.officerName],
+                  ['Branch',   loan.branchName],
+                  ['Address',  loan.branchAddress],
+                  ['Contact',  loan.officerContact],
+                ],
+              },
+            ].map((section) => (
+              <View key={section.title} style={s.detailSection}>
+                <Text style={s.detailSectionTitle}>{section.title}</Text>
+                {section.rows.map(([k, v, accent], i) => (
+                  <DRow key={k} label={k} value={v} accent={accent} borderless={i === section.rows.length - 1} />
+                ))}
               </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Lender</Text>
-                <Text style={styles.detailValue}>{loanData.lender}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Loan Type</Text>
-                <Text style={styles.detailValue}>{loanData.type}</Text>
-              </View>
-            </View>
+            ))}
 
-            <View style={styles.detailsSection}>
-              <Text style={styles.detailsSectionTitle}>Loan Terms</Text>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Original Amount</Text>
-                <Text style={styles.detailValueBold}>
-                  ₱{loanData.loanAmount.toLocaleString()}
-                </Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Interest Rate</Text>
-                <Text style={styles.detailValue}>{loanData.interestRate}% per annum</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Loan Term</Text>
-                <Text style={styles.detailValue}>{loanData.terms}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Monthly Payment</Text>
-                <Text style={styles.detailValueBold}>{loanData.monthlyPayment}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Current Amount Due</Text>
-                <Text style={styles.detailValueBold}>
-                  ₱{billingInfo.totalAmountDue.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </Text>
-              </View>
-              {billingInfo.lateFees > 0 && (
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Late Fees</Text>
-                  <Text style={[styles.detailValueBold, { color: '#DC2626' }]}>
-                    ₱{billingInfo.lateFees.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            <View style={styles.detailsSection}>
-              <Text style={styles.detailsSectionTitle}>Payment Breakdown</Text>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Base Payment</Text>
-                <Text style={styles.detailValue}>
-                  ₱{billingInfo.basePayment.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Principal Amount</Text>
-                <Text style={styles.detailValue}>
-                  ₱{billingInfo.principalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Interest Amount</Text>
-                <Text style={styles.detailValue}>
-                  ₱{billingInfo.interestAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </Text>
-              </View>
-              {billingInfo.lateFees > 0 && (
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Late Fees ({billingInfo.daysLate} days)</Text>
-                  <Text style={[styles.detailValue, { color: '#DC2626' }]}>
-                    ₱{billingInfo.lateFees.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            <View style={styles.detailsSection}>
-              <Text style={styles.detailsSectionTitle}>Important Dates</Text>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Start Date</Text>
-                <Text style={styles.detailValue}>{loanData.loanStartDate}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Maturity Date</Text>
-                <Text style={styles.detailValue}>{loanData.loanEndDate}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Next Due Date</Text>
-                <Text style={styles.detailValueBold}>{loanData.nextDueDate}</Text>
-              </View>
-            </View>
-
-            <View style={styles.detailsSection}>
-              <Text style={styles.detailsSectionTitle}>Payment Progress</Text>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Payments Made</Text>
-                <Text style={styles.detailValue}>
-                  {loanData.paymentsCompleted} of {loanData.loanTerm}
-                </Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Remaining Payments</Text>
-                <Text style={styles.detailValue}>{loanData.paymentsRemaining}</Text>
-              </View>
-            </View>
+            <TouchableOpacity style={s.payBtnFull} onPress={() => { setShowDetails(false); goToPayNow(); }}>
+              <MaterialIcons name="payment" size={20} color="white" />
+              <Text style={s.payBtnTxt}>Pay Now — {fmt(billing.total)}</Text>
+            </TouchableOpacity>
           </ScrollView>
         </SafeAreaView>
       </Modal>
+
     </SafeAreaView>
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 32,
-  },
-  urgentAlert: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF7ED',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: '#F97316',
-  },
-  urgentTextContainer: {
-    marginLeft: 12,
-    flex: 1,
-  },
-  urgentTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#F97316',
-    marginBottom: 4,
-  },
-  urgentText: {
-    fontSize: 14,
-    color: '#9A3412',
-  },
-  balanceCard: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  balanceHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 20,
-  },
-  balanceLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 8,
-  },
-  balanceAmount: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#1F2937',
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  activeStatus: {
-    backgroundColor: '#D1FAE5',
-  },
-  statusText: {
-    color: '#059669',
-    fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 4,
-  },
-  progressContainer: {
-    marginBottom: 20,
-  },
-  progressInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  progressItem: {
-    alignItems: 'center',
-  },
-  progressValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#8B5CF6',
-  },
-  progressLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 4,
-  },
-  progressBarWrapper: {
-    flex: 1,
-    marginHorizontal: 16,
-  },
-  progressBar: {
-    height: 8,
-    backgroundColor: '#E5E7EB',
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#8B5CF6',
-    borderRadius: 4,
-  },
-  progressPercentage: {
-    fontSize: 11,
-    color: '#6B7280',
-    textAlign: 'center',
-    marginTop: 6,
-  },
-  amountBreakdown: {
-    flexDirection: 'row',
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-  },
-  breakdownItem: {
-    flex: 1,
-  },
-  breakdownLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginBottom: 4,
-  },
-  breakdownValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  breakdownValuePaid: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#10B981',
-  },
-  breakdownDivider: {
-    width: 1,
-    backgroundColor: '#E5E7EB',
-    marginHorizontal: 16,
-  },
-  paymentCard: {
-    backgroundColor: '#F5F3FF',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
-    borderWidth: 2,
-    borderColor: '#DDD6FE',
-  },
-  paymentCardUrgent: {
-    backgroundColor: '#FFF7ED',
-    borderColor: '#FED7AA',
-  },
-  paymentRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  paymentLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  paymentIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'white',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  paymentLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginBottom: 4,
-  },
-  paymentDateText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 2,
-  },
-  paymentDaysText: {
-    fontSize: 12,
-    color: '#8B5CF6',
-    fontWeight: '500',
-  },
-  paymentDaysTextUrgent: {
-    color: '#F97316',
-  },
-  paymentRight: {
-    alignItems: 'flex-end',
-  },
-  paymentAmountLarge: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#8B5CF6',
-  },
-  paymentAmountUrgent: {
-    color: '#F97316',
-  },
-  paymentNote: {
-    fontSize: 11,
-    color: '#6B7280',
-    marginTop: 2,
-    fontStyle: 'italic',
-  },
-  payNowButton: {
-    backgroundColor: '#8B5CF6',
-    padding: 16,
-    borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  payNowButtonUrgent: {
-    backgroundColor: '#F97316',
-  },
-  payNowButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 16,
-  },
-  historyCard: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
-  },
-  historyHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  viewAllText: {
-    color: '#8B5CF6',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  historyItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  historyIconWrapper: {
-    marginRight: 12,
-  },
-  historyContent: {
-    flex: 1,
-  },
-  historyDate: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1F2937',
-    marginBottom: 2,
-  },
-  historyMethod: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  historyRight: {
-    alignItems: 'flex-end',
-  },
-  historyAmount: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  tipsCard: {
-    backgroundColor: '#FFFBEB',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#FEF3C7',
-  },
-  tipsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  tipsTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#92400E',
-    marginLeft: 8,
-  },
-  tipItem: {
-    flexDirection: 'row',
-    marginBottom: 8,
-  },
-  tipBullet: {
-    fontSize: 14,
-    color: '#F59E0B',
-    marginRight: 8,
-    fontWeight: 'bold',
-  },
-  tipText: {
-    fontSize: 13,
-    color: '#78350F',
-    flex: 1,
-    lineHeight: 18,
-  },
-  modalContent: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  historySummary: {
-    backgroundColor: 'white',
-    padding: 24,
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  historySummaryLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 8,
-  },
-  historySummaryAmount: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    color: '#10B981',
-    marginBottom: 4,
-  },
-  historySummarySubtext: {
-    fontSize: 13,
-    color: '#6B7280',
-  },
-  fullHistoryItem: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginHorizontal: 16,
-    marginBottom: 12,
-  },
-  fullHistoryHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  fullHistoryLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  fullHistoryInfo: {
-    marginLeft: 12,
-  },
-  fullHistoryDate: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 2,
-  },
-  fullHistoryMethod: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  fullHistoryTotal: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1F2937',
-  },
-  paymentBreakdown: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
-    padding: 12,
-  },
-  breakdownRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-  },
-  breakdownLabelDetail: {
-    fontSize: 13,
-    color: '#6B7280',
-  },
-  breakdownAmount: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#374151',
-  },
-  detailsSection: {
-    backgroundColor: 'white',
-    padding: 20,
-    marginBottom: 16,
-  },
-  detailsSectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 2,
-    borderBottomColor: '#8B5CF6',
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  detailLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-    flex: 1,
-  },
-  detailValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1F2937',
-    textAlign: 'right',
-    flex: 1,
-  },
-  detailValueBold: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#8B5CF6',
-    textAlign: 'right',
-    flex: 1,
-  },
+// ─── Styles ───────────────────────────────────────────────────────────────────
+const s = StyleSheet.create({
+  root:   { flex: 1, backgroundColor: '#F5F6FA' },
+  scroll: { padding: 16, paddingBottom: 48 },
+
+  header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'white', paddingHorizontal: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  headerBtn:   { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
+  headerTitle: { fontSize: 17, fontWeight: '700', color: '#1F2937' },
+
+  // ── Empty state ──
+  emptyWrap:   { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
+  emptyTitle:  { fontSize: 20, fontWeight: '800', color: '#1F2937', marginTop: 18, marginBottom: 8 },
+  emptySub:    { fontSize: 14, color: '#6B7280', textAlign: 'center', lineHeight: 20, marginBottom: 28 },
+  emptyBtn:    { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FB923C', paddingVertical: 14, paddingHorizontal: 28, borderRadius: 14 },
+  emptyBtnTxt: { color: 'white', fontWeight: '700', fontSize: 15 },
+
+  // ── Tier banner ──
+  tierBanner:      { flexDirection: 'row', alignItems: 'center', borderRadius: 12, padding: 12, marginBottom: 14, borderWidth: 1 },
+  tierIconBox:     { width: 38, height: 38, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  tierBannerTitle: { fontSize: 13, fontWeight: '700', marginBottom: 2 },
+  tierBannerSub:   { fontSize: 11, color: '#6B7280', lineHeight: 16 },
+
+  alertBanner:       { flexDirection: 'row', alignItems: 'flex-start', borderRadius: 12, padding: 14, marginBottom: 14, borderWidth: 1 },
+  alertBannerOrange: { backgroundColor: '#FFF7ED', borderColor: '#FED7AA' },
+  alertBannerRed:    { backgroundColor: '#FEF2F2', borderColor: '#FECACA' },
+  alertTitle:        { fontSize: 14, fontWeight: '700', marginBottom: 2 },
+  alertMsg:          { fontSize: 12, lineHeight: 16 },
+
+  balanceCard:     { backgroundColor: 'white', borderRadius: 18, padding: 20, marginBottom: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.07, shadowRadius: 10, elevation: 3 },
+  balanceTop:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
+  balanceLbl:      { fontSize: 12, color: '#6B7280', fontWeight: '500', marginBottom: 4 },
+  balanceAmt:      { fontSize: 28, fontWeight: '800', color: '#1F2937' },
+  activePill:      { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#ECFDF5', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },
+  activePillTxt:   { fontSize: 12, fontWeight: '700', color: '#059669' },
+  progressSection: { marginBottom: 16 },
+  progressNumbers: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  progressStat:    { alignItems: 'center', minWidth: 40 },
+  progressStatNum: { fontSize: 18, fontWeight: '800', color: '#1F2937' },
+  progressStatLbl: { fontSize: 11, color: '#9CA3AF', marginTop: 1 },
+  progressBarWrap: { flex: 1, alignItems: 'center' },
+  progressTrack:   { width: '100%', height: 10, backgroundColor: '#E5E7EB', borderRadius: 5, overflow: 'hidden', marginBottom: 4 },
+  progressFill:    { height: '100%', backgroundColor: '#FB923C', borderRadius: 5 },
+  progressPct:     { fontSize: 11, color: '#6B7280' },
+  paidRow:         { flexDirection: 'row', alignItems: 'stretch', backgroundColor: '#F9FAFB', borderRadius: 10, overflow: 'hidden' },
+  paidItem:        { flex: 1, alignItems: 'center', paddingVertical: 12 },
+  paidDivider:     { width: 1, backgroundColor: '#E5E7EB' },
+  paidLbl:         { fontSize: 11, color: '#6B7280', marginBottom: 4 },
+  paidVal:         { fontSize: 14, fontWeight: '700', color: '#1F2937' },
+
+  payCard:         { backgroundColor: 'white', borderRadius: 18, padding: 20, marginBottom: 14, borderWidth: 1.5, borderColor: '#FFEDD5', shadowColor: '#FB923C', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 3 },
+  payCardUrgent:   { borderColor: '#FED7AA', backgroundColor: '#FFFBEB' },
+  payCardTop:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 },
+  payCardLeft:     { flexDirection: 'row', alignItems: 'flex-start', gap: 12, flex: 1 },
+  payCardIcon:     { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
+  payCardLbl:      { fontSize: 12, color: '#6B7280', marginBottom: 3 },
+  payCardDate:     { fontSize: 15, fontWeight: '700', color: '#1F2937', marginBottom: 2 },
+  payCardDays:     { fontSize: 12, fontWeight: '500' },
+  payCardRight:    { alignItems: 'flex-end' },
+  payCardAmt:      { fontSize: 24, fontWeight: '800' },
+  payCardNote:     { fontSize: 11, color: '#DC2626', marginTop: 2 },
+  payBreakdown:    { flexDirection: 'row', justifyContent: 'space-around', backgroundColor: '#F9FAFB', borderRadius: 10, padding: 12, marginBottom: 14 },
+  payBreakdownItem:{ alignItems: 'center' },
+  payBreakdownLbl: { fontSize: 11, color: '#6B7280', marginBottom: 3 },
+  payBreakdownVal: { fontSize: 13, fontWeight: '700', color: '#1F2937' },
+  payBtn:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FB923C', paddingVertical: 15, borderRadius: 12, shadowColor: '#FB923C', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  payBtnUrgent:    { backgroundColor: '#F97316' },
+  payBtnTxt:       { color: 'white', fontSize: 15, fontWeight: '700' },
+  payBtnFull:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FB923C', margin: 16, paddingVertical: 16, borderRadius: 12, shadowColor: '#FB923C', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+
+  summaryCard:     { backgroundColor: 'white', borderRadius: 18, padding: 20, marginBottom: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 1 },
+  cardTitle:       { fontSize: 15, fontWeight: '700', color: '#1F2937', marginBottom: 14 },
+  summaryGrid:     { flexDirection: 'row', flexWrap: 'wrap', gap: 0 },
+  summaryCell:     { width: '50%', paddingVertical: 10, paddingRight: 8, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  summaryCellFull: { width: '100%' },
+  summaryCellLbl:  { fontSize: 11, color: '#9CA3AF', marginBottom: 3 },
+  summaryCellVal:  { fontSize: 13, fontWeight: '600', color: '#1F2937' },
+
+  amortBtn:       { flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center', marginTop: 16, paddingVertical: 10, borderWidth: 1, borderColor: '#FFEDD5', borderRadius: 10, backgroundColor: '#FAFAFF' },
+  amortBtnTxt:    { fontSize: 13, fontWeight: '600', color: '#FB923C', flex: 1, textAlign: 'center' },
+  amortTable:     { marginTop: 12, borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: '#E5E7EB' },
+  amortHeader:    { backgroundColor: '#FFF7ED' },
+  amortHeaderTxt: { fontSize: 11, fontWeight: '700', color: '#7C3AED', flex: 1, textAlign: 'center', paddingVertical: 8 },
+  amortRow:       { flexDirection: 'row', paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  amortRowPaid:   { backgroundColor: '#F0FDF4' },
+  amortCell:      { flex: 1, fontSize: 11, textAlign: 'center', color: '#1F2937' },
+
+  histCard:       { backgroundColor: 'white', borderRadius: 18, padding: 20, marginBottom: 14 },
+  histCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  viewAll:        { color: '#FB923C', fontSize: 13, fontWeight: '600' },
+  histRow:        { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  histIconWrap:   { marginRight: 12 },
+  histMid:        { flex: 1 },
+  histDate:       { fontSize: 13, fontWeight: '600', color: '#1F2937', marginBottom: 1 },
+  histMethod:     { fontSize: 12, color: '#6B7280' },
+  histAmt:        { fontSize: 14, fontWeight: '700', color: '#1F2937' },
+  completedPill:  { backgroundColor: '#ECFDF5', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2, marginTop: 3 },
+  completedPillTxt:{ fontSize: 10, fontWeight: '600', color: '#059669' },
+  noPayWrap:      { alignItems: 'center', paddingVertical: 20, gap: 8 },
+  noPayTxt:       { fontSize: 13, color: '#9CA3AF' },
+
+  txShortcut:     { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'white', borderRadius: 14, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: '#FFEDD5' },
+  txShortcutTxt:  { flex: 1, fontSize: 14, fontWeight: '600', color: '#FB923C' },
+
+  officerCard:   { backgroundColor: 'white', borderRadius: 18, padding: 20, marginBottom: 14 },
+  officerRow:    { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
+  officerAvatar: { width: 54, height: 54, borderRadius: 27, backgroundColor: '#FFF7ED', justifyContent: 'center', alignItems: 'center' },
+  officerName:   { fontSize: 15, fontWeight: '700', color: '#1F2937', marginBottom: 2 },
+  officerBranch: { fontSize: 12, color: '#6B7280', marginBottom: 1 },
+  officerAddr:   { fontSize: 11, color: '#9CA3AF' },
+  contactBtn:    { flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center', borderWidth: 1, borderColor: '#FB923C', borderRadius: 10, paddingVertical: 12 },
+  contactBtnTxt: { color: '#FB923C', fontWeight: '600', fontSize: 14 },
+
+  tipsCard:   { backgroundColor: '#FFFBEB', borderRadius: 18, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: '#FEF3C7' },
+  tipsHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
+  tipsTitle:  { fontSize: 14, fontWeight: '700', color: '#92400E' },
+  tip:        { flexDirection: 'row', marginBottom: 7 },
+  tipBullet:  { color: '#F59E0B', fontWeight: '800', marginRight: 8, fontSize: 14 },
+  tipTxt:     { fontSize: 13, color: '#78350F', flex: 1, lineHeight: 18 },
+
+  histSummary:    { backgroundColor: 'white', padding: 24, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  histSummaryLbl: { fontSize: 12, color: '#6B7280', marginBottom: 4 },
+  histSummaryAmt: { fontSize: 32, fontWeight: '800', color: '#10B981', marginBottom: 4 },
+  histSummarySub: { fontSize: 12, color: '#6B7280' },
+  fullHistItem:   { backgroundColor: 'white', borderRadius: 14, padding: 16, marginBottom: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1 },
+  fullHistTop:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  fullHistLeft:   { flexDirection: 'row', alignItems: 'flex-start', gap: 10, flex: 1 },
+  fullHistIconBox:{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#ECFDF5', justifyContent: 'center', alignItems: 'center' },
+  fullHistDate:   { fontSize: 14, fontWeight: '700', color: '#1F2937', marginBottom: 2 },
+  fullHistMethod: { fontSize: 12, color: '#6B7280' },
+  fullHistRef:    { fontSize: 11, color: '#9CA3AF', marginTop: 2 },
+  fullHistRight:  { alignItems: 'flex-end' },
+  fullHistAmt:    { fontSize: 16, fontWeight: '800', color: '#1F2937' },
+  expandedBreakdown: { backgroundColor: '#F9FAFB', borderRadius: 10, padding: 12, marginTop: 12 },
+  expandRow:      { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 5 },
+  expandLbl:      { fontSize: 13, color: '#6B7280' },
+  expandVal:      { fontSize: 13, color: '#1F2937', fontWeight: '500' },
+  statusPill:     { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#ECFDF5', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4, alignSelf: 'flex-start', marginTop: 8 },
+  statusPillTxt:  { fontSize: 12, fontWeight: '600', color: '#059669' },
+
+  detailSection:      { backgroundColor: 'white', padding: 20, marginBottom: 12 },
+  detailSectionTitle: { fontSize: 14, fontWeight: '700', color: '#1F2937', marginBottom: 12, paddingBottom: 10, borderBottomWidth: 2, borderBottomColor: '#FB923C' },
+  dRow:               { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  dKey:               { fontSize: 13, color: '#6B7280', flex: 1 },
+  dVal:               { fontSize: 13, fontWeight: '500', color: '#1F2937', textAlign: 'right', flex: 1 },
 });
 
 export default CurrentLoanScreen;

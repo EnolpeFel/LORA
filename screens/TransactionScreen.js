@@ -1,880 +1,582 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Modal, ScrollView, Alert } from 'react-native';
+import React, { useState, useCallback, useEffect } from 'react';
+import {
+  View, Text, StyleSheet, TouchableOpacity,
+  FlatList, Modal, ScrollView, Alert, StatusBar
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system';
+
+// Optional expo modules — gracefully degrade if not installed
+let Print, Sharing, FileSystem;
+try { Print = require('expo-print'); } catch (_) {}
+try { Sharing = require('expo-sharing'); } catch (_) {}
+try { FileSystem = require('expo-file-system'); } catch (_) {}
+
+import LoanStore from './Loanstore.js';
 
 const TransactionsScreen = ({ navigation, route }) => {
-  const [selectedTransaction, setSelectedTransaction] = useState(null);
+  const { darkMode = false, loanId, loanType } = route.params || {};
+  const d = darkMode;
+
+  // ─── Color Palette (dark-mode aware) ────────────────────────────────────────
+  const C = {
+    bg: d ? '#0A0F1E' : '#F8FAFC',
+    card: d ? '#1A1F2E' : '#FFFFFF',
+    cardAlt: d ? '#1F2535' : '#F8FAFC',
+    border: d ? '#2D3345' : '#E2E8F0',
+    text: d ? '#F1F5F9' : '#0F172A',
+    subtext: d ? '#94A3B8' : '#475569',
+    faint: d ? '#262B3C' : '#F1F5F9',
+    purple: '#FB923C',
+    purpleLight: d ? '#431407' : '#FFF7ED',
+    green: '#10B981',
+    greenLight: d ? '#064E3B' : '#DCFCE7',
+    greenText: d ? '#6EE7B7' : '#166534',
+    amber: '#F59E0B',
+    amberLight: d ? '#78350F' : '#FEF3C7',
+    amberText: d ? '#FCD34D' : '#92400E',
+    red: '#EF4444',
+    redLight: d ? '#7F1D1D' : '#FEE2E2',
+    redText: d ? '#FCA5A5' : '#B91C1C',
+    blue: '#3B82F6',
+    blueLight: d ? '#431407' : '#EFF6FF',
+    shadow: d ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.08)',
+    modalBg: d ? '#111827' : '#FFFFFF',
+    overlay: 'rgba(0,0,0,0.6)',
+  };
+
+  const [selectedTx, setSelectedTx] = useState(null);
   const [receiptVisible, setReceiptVisible] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
-  
-  // Use transactions from route params if available, otherwise use default data
-  const transactions = route.params?.transactions || [
-    {
-      id: '1',
-      type: 'Payment',
-      amount: '12,500.00',
-      date: 'Jul 5, 2023',
-      time: '10:45 AM',
-      status: 'Completed',
-      loanId: 'LN-2023-001',
-      transactionId: 'TXN-001',
-      paymentMethod: 'Lora Wallet',
-      lender: 'GCash',
-      loanType: 'Personal Loan',
-      applicationDate: 'Jun 1, 2023',
-      interestRate: 5,
-      interestType: 'Fixed',
-      loanAmount: 150000,
-      term: '12 months',
-      totalInterest: 15000,
-      processingFee: 1000,
-      netRelease: 134000,
-      dueDate: 'Jul 5, 2023',
-      monthlyPayment: 12500
-    },
-    {
-      id: '2',
-      type: 'Loan Disbursement',
-      amount: '150,000.00',
-      date: 'Jun 15, 2023',
-      time: '2:30 PM',
-      status: 'Completed',
-      loanId: 'LN-2023-001',
-      transactionId: 'TXN-002',
-      paymentMethod: 'Bank Transfer',
-      lender: 'GCash',
-      loanType: 'Personal Loan',
-      applicationDate: 'Jun 1, 2023',
-      interestRate: 5,
-      interestType: 'Fixed',
-      loanAmount: 150000,
-      term: '12 months',
-      totalInterest: 15000,
-      processingFee: 1000,
-      netRelease: 134000,
-      dueDate: 'Jul 5, 2023',
-      monthlyPayment: 12500
-    },
-    {
-      id: '3',
-      type: 'Payment',
-      amount: '5,250.00',
-      date: 'May 5, 2023',
-      time: '9:15 AM',
-      status: 'Completed',
-      loanId: 'LN-2023-002',
-      transactionId: 'TXN-003',
-      paymentMethod: 'Debit Card',
-      lender: 'MoneyTree Lending',
-      loanType: 'Business Loan',
-      applicationDate: 'Apr 10, 2023',
-      interestRate: 7,
-      interestType: 'Reducing',
-      loanAmount: 75000,
-      term: '18 months',
-      totalInterest: 9450,
-      processingFee: 800,
-      netRelease: 68750,
-      dueDate: 'May 5, 2023',
-      monthlyPayment: 5250
-    },
-    {
-      id: '4',
-      type: 'Payment Failed',
-      amount: '12,500.00',
-      date: 'Apr 5, 2023',
-      time: '11:20 AM',
-      status: 'Failed',
-      loanId: 'LN-2023-001',
-      transactionId: 'TXN-004',
-      paymentMethod: 'Credit Card',
-      lender: 'GCash',
-      loanType: 'Personal Loan',
-      applicationDate: 'Jun 1, 2023',
-      interestRate: 5,
-      interestType: 'Fixed',
-      loanAmount: 150000,
-      term: '12 months',
-      totalInterest: 15000,
-      processingFee: 1000,
-      netRelease: 134000,
-      dueDate: 'Jul 5, 2023',
-      monthlyPayment: 12500,
-      failureReason: 'Insufficient funds'
-    },
-    {
-      id: '5',
-      type: 'Payment',
-      amount: '8,750.00',
-      date: 'Aug 10, 2023',
-      time: '4:30 PM',
-      status: 'Completed',
-      loanId: 'LN-2023-003',
-      transactionId: 'TXN-005',
-      paymentMethod: 'GCash',
-      lender: 'QuickCash Philippines',
-      loanType: 'Emergency Loan',
-      applicationDate: 'Jul 15, 2023',
-      interestRate: 6.5,
-      interestType: 'Fixed',
-      loanAmount: 50000,
-      term: '6 months',
-      totalInterest: 3250,
-      processingFee: 500,
-      netRelease: 46250,
-      dueDate: 'Aug 10, 2023',
-      monthlyPayment: 8750
+  const [txFilter, setTxFilter] = useState('all');
+
+  // ── Pull transactions from LoanStore (live), fall back to route params ──
+  const [, forceUpdate] = useState(0);
+  useEffect(() => {
+    const listener = () => forceUpdate(n => n + 1);
+    LoanStore.subscribe(listener);
+    return () => LoanStore.unsubscribe(listener);
+  }, []);
+
+  const rawTransactions = loanId
+    ? LoanStore.getTransactions(loanId)
+    : (route.params?.transactions || LoanStore.getTransactions());
+
+  const transactions = rawTransactions.filter(tx => {
+    if (txFilter === 'payments') return tx.type === 'Payment';
+    if (txFilter === 'disbursements') return tx.type === 'Loan Disbursement';
+    if (txFilter === 'failed') return tx.status === 'Failed';
+    return true;
+  });
+
+  const totalPoints = rawTransactions.reduce((sum, t) => sum + (t.creditPointsEarned || 0), 0);
+  const successCount = rawTransactions.filter(t => t.status === 'Completed').length;
+  const failedCount = rawTransactions.filter(t => t.status === 'Failed').length;
+
+  const screenTitle = loanId
+    ? `${loanType || 'Loan'} History`
+    : 'All Transactions';
+
+  const screenSubtitle = loanId
+    ? `${loanId} · ${rawTransactions.length} records`
+    : `${rawTransactions.length} total records`;
+
+  // ─── Receipt HTML ─────────────────────────────────────────────────────────────
+  const generateReceiptHTML = (tx) => `
+    <!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+    body{font-family:Arial,sans-serif;padding:24px;color:#1a1a1a;max-width:480px;margin:auto}
+    .brand{font-size:22px;font-weight:800;color:#FB923C;margin-bottom:4px}
+    .title{font-size:17px;font-weight:700;margin-bottom:2px}
+    .meta{font-size:12px;color:#666;margin-bottom:16px}
+    .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;margin-bottom:20px}
+    .ok{background:#DCFCE7;color:#166534}.fail{background:#FEE2E2;color:#B91C1C}
+    h3{font-size:13px;font-weight:700;color:#FB923C;border-bottom:1px solid #E5E7EB;padding-bottom:6px;margin:16px 0 10px}
+    .row{display:flex;justify-content:space-between;margin-bottom:7px;font-size:13px}
+    .lbl{color:#6B7280}.val{font-weight:500}
+    .amt{color:#FB923C;font-weight:700}
+    .hl{background:#FFF7ED;border-radius:8px;padding:10px 12px;margin-top:8px}
+    .pts{background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:10px 12px;margin:12px 0}
+    .footer{margin-top:24px;text-align:center;font-size:11px;color:#9CA3AF;border-top:1px solid #E5E7EB;padding-top:14px}
+    </style></head><body>
+    <div class="brand">LORA FINANCE</div>
+    <div class="title">Transaction Receipt</div>
+    <div class="meta">Receipt #${tx.transactionId || tx.id} · ${tx.date} at ${tx.time}</div>
+    <span class="badge ${tx.status === 'Completed' ? 'ok' : 'fail'}">${tx.status}</span>
+    <h3>Transaction Details</h3>
+    <div class="row"><span class="lbl">Type</span><span class="val">${tx.type}</span></div>
+    <div class="row"><span class="lbl">Amount</span><span class="val amt">₱${tx.amount}</span></div>
+    <div class="row"><span class="lbl">Payment Method</span><span class="val">${tx.paymentMethod || 'N/A'}</span></div>
+    ${tx.failureReason ? `<div class="row"><span class="lbl" style="color:#EF4444">Failure Reason</span><span class="val" style="color:#EF4444">${tx.failureReason}</span></div>` : ''}
+    <h3>Loan Information</h3>
+    <div class="row"><span class="lbl">Loan ID</span><span class="val">${tx.loanId}</span></div>
+    <div class="row"><span class="lbl">Type</span><span class="val">${tx.loanType || 'N/A'}</span></div>
+    <div class="row"><span class="lbl">Lender</span><span class="val">${tx.lender || 'N/A'}</span></div>
+    <div class="row"><span class="lbl">Application Date</span><span class="val">${tx.applicationDate || 'N/A'}</span></div>
+    ${tx.loanAmount ? `
+    <h3>Loan Terms</h3>
+    <div class="row"><span class="lbl">Principal</span><span class="val amt">₱${tx.loanAmount.toLocaleString()}</span></div>
+    <div class="row"><span class="lbl">Term</span><span class="val">${tx.term}</span></div>
+    <div class="row"><span class="lbl">Interest Rate</span><span class="val">${tx.interestRate}% ${tx.interestType}</span></div>
+    <div class="row"><span class="lbl">Total Interest</span><span class="val amt">₱${tx.totalInterest?.toFixed(2)}</span></div>
+    <div class="row"><span class="lbl">Processing Fee</span><span class="val">₱${tx.processingFee?.toFixed(2)}</span></div>
+    <div class="hl"><div class="row"><span class="lbl" style="font-weight:700">Net Released</span><span class="val amt">₱${tx.netRelease?.toFixed(2)}</span></div></div>` : ''}
+    ${tx.creditPointsEarned > 0 ? `
+    <div class="pts">
+      <div style="font-weight:700;color:#92400E;margin-bottom:4px">⭐ +${tx.creditPointsEarned} Credit Points Earned</div>
+      <div style="font-size:12px;color:#78350F">${tx.type === 'Payment' ? 'On-time repayment (+20 pts)' : 'Lora transaction (+5 pts)'}</div>
+    </div>` : ''}
+    <div class="footer">
+      <p>Thank you for banking with Lora Finance by RightApp Inc.</p>
+      <p>Generated ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}</p>
+    </div></body></html>
+  `;
+
+  const downloadPDF = async (tx) => {
+    if (!Print || !FileSystem) {
+      Alert.alert('Unavailable', 'Install expo-print and expo-file-system to enable PDF downloads.', [{ text: 'OK' }]);
+      return;
     }
-  ];
-
-  // Function to generate HTML content for PDF
-  const generateReceiptHTML = (transaction) => {
-    return `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <style>
-          body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
-          .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #4F46E5; padding-bottom: 15px; }
-          .logo { font-size: 24px; font-weight: bold; color: #4F46E5; margin-bottom: 10px; }
-          .title { font-size: 20px; font-weight: bold; margin-bottom: 5px; }
-          .receipt-number { font-size: 14px; color: #666; }
-          .section { margin-bottom: 20px; }
-          .section-title { font-size: 16px; font-weight: bold; margin-bottom: 10px; color: #4F46E5; border-bottom: 1px solid #EEE; padding-bottom: 5px; }
-          .detail-row { display: flex; justify-content: space-between; margin-bottom: 8px; }
-          .detail-label { font-weight: 500; color: #666; }
-          .detail-value { font-weight: 500; }
-          .amount { color: #8B5CF6; font-weight: bold; }
-          .highlight { background-color: #F0F9FF; padding: 10px; border-radius: 5px; margin-top: 10px; }
-          .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #999; border-top: 1px solid #EEE; padding-top: 15px; }
-          .status { display: inline-block; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; }
-          .status-completed { background-color: #DCFCE7; color: #166534; }
-          .status-failed { background-color: #FEE2E2; color: #B91C1C; }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <div class="logo">LORA FINANCE</div>
-          <div class="title">Loan Transaction Receipt</div>
-          <div class="receipt-number">Receipt #${transaction.transactionId || transaction.id}</div>
-          <div class="receipt-number">Date: ${transaction.date} • ${transaction.time}</div>
-          <div class="status status-${transaction.status.toLowerCase()}">${transaction.status}</div>
-        </div>
-        
-        <div class="section">
-          <div class="section-title">Transaction Details</div>
-          <div class="detail-row">
-            <span class="detail-label">Type:</span>
-            <span class="detail-value">${transaction.type}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">Amount:</span>
-            <span class="detail-value amount">₱${transaction.amount}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">Payment Method:</span>
-            <span class="detail-value">${transaction.paymentMethod || 'N/A'}</span>
-          </div>
-          ${transaction.status === 'Failed' && transaction.failureReason ? `
-          <div class="detail-row">
-            <span class="detail-label">Failure Reason:</span>
-            <span class="detail-value" style="color: #EF4444;">${transaction.failureReason}</span>
-          </div>
-          ` : ''}
-        </div>
-        
-        <div class="section">
-          <div class="section-title">Loan Information</div>
-          <div class="detail-row">
-            <span class="detail-label">Loan ID:</span>
-            <span class="detail-value">${transaction.loanId}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">Loan Type:</span>
-            <span class="detail-value">${transaction.loanType || 'N/A'}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">Lender:</span>
-            <span class="detail-value">${transaction.lender || 'N/A'}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">Application Date:</span>
-            <span class="detail-value">${transaction.applicationDate || 'N/A'}</span>
-          </div>
-        </div>
-        
-        ${transaction.loanAmount ? `
-        <div class="section">
-          <div class="section-title">Loan Terms & Breakdown</div>
-          <div class="detail-row">
-            <span class="detail-label">Principal Amount:</span>
-            <span class="detail-value amount">₱${transaction.loanAmount.toLocaleString()}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">Loan Term:</span>
-            <span class="detail-value">${transaction.term || 'N/A'}</span>
-          </div>
-          ${transaction.interestRate ? `
-          <div class="detail-row">
-            <span class="detail-label">Interest Rate:</span>
-            <span class="detail-value">${transaction.interestRate}%</span>
-          </div>
-          ` : ''}
-          ${transaction.interestType ? `
-          <div class="detail-row">
-            <span class="detail-label">Interest Type:</span>
-            <span class="detail-value">${transaction.interestType}</span>
-          </div>
-          ` : ''}
-          ${transaction.totalInterest ? `
-          <div class="detail-row">
-            <span class="detail-label">Total Interest:</span>
-            <span class="detail-value amount">₱${transaction.totalInterest.toFixed(2)}</span>
-          </div>
-          ` : ''}
-          ${transaction.processingFee ? `
-          <div class="detail-row">
-            <span class="detail-label">Processing Fee:</span>
-            <span class="detail-value amount">₱${transaction.processingFee.toFixed(2)}</span>
-          </div>
-          ` : ''}
-          ${transaction.netRelease ? `
-          <div class="highlight">
-            <div class="detail-row">
-              <span class="detail-label">Net Amount Received:</span>
-              <span class="detail-value amount">₱${transaction.netRelease.toFixed(2)}</span>
-            </div>
-          </div>
-          ` : ''}
-        </div>
-        ` : ''}
-        
-        <div class="footer">
-          <p>Thank you for your transaction with Lora Finance</p>
-          <p>This receipt is proof of your transaction. Please keep it for your records.</p>
-          <p>Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}</p>
-        </div>
-      </body>
-      </html>
-    `;
-  };
-
-  // Function to download receipt as PDF
-  const downloadReceiptAsPDF = async (transaction) => {
     try {
       setIsDownloading(true);
-      
-      // Generate HTML content
-      const html = generateReceiptHTML(transaction);
-      
-      // Generate PDF
-      const { uri } = await Print.printToFileAsync({ html });
-      
-      // Create a filename
-      const filename = `Receipt_${transaction.transactionId || transaction.id}_${new Date().getTime()}.pdf`;
-      const newPath = `${FileSystem.documentDirectory}${filename}`;
-      
-      // Move the file to a permanent location
-      await FileSystem.moveAsync({
-        from: uri,
-        to: newPath,
-      });
-      
-      // Share the PDF file
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(newPath, {
-          mimeType: 'application/pdf',
-          dialogTitle: 'Share Receipt',
-          UTI: 'com.adobe.pdf',
-        });
+      const { uri } = await Print.printToFileAsync({ html: generateReceiptHTML(tx) });
+      const filename = `Lora_Receipt_${tx.transactionId || tx.id}_${Date.now()}.pdf`;
+      const dest = `${FileSystem.documentDirectory}${filename}`;
+      await FileSystem.moveAsync({ from: uri, to: dest });
+      if (Sharing && await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(dest, { mimeType: 'application/pdf', dialogTitle: 'Share Receipt', UTI: 'com.adobe.pdf' });
       } else {
-        Alert.alert(
-          'Download Complete',
-          `Receipt has been saved to: ${newPath}`,
-          [{ text: 'OK' }]
-        );
+        Alert.alert('Saved', `Receipt saved to: ${dest}`, [{ text: 'OK' }]);
       }
-      
+    } catch (e) {
+      Alert.alert('Error', 'Failed to generate PDF. Please try again.', [{ text: 'OK' }]);
+    } finally {
       setIsDownloading(false);
-      setReceiptVisible(false);
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      setIsDownloading(false);
-      Alert.alert(
-        'Error',
-        'Failed to generate receipt PDF. Please try again.',
-        [{ text: 'OK' }]
-      );
     }
   };
 
-  const getTransactionIcon = (type, status) => {
-    if (status === 'Failed') return 'close-circle';
-    return type.includes('Payment') ? 'cash-outline' : 'business-outline';
+  // ─── Transaction Card ────────────────────────────────────────────────────────
+  const getTypeConfig = (type, status) => {
+    if (status === 'Failed') return { icon: 'close-circle', color: C.red, bg: C.redLight };
+    if (type === 'Payment') return { icon: 'cash-outline', color: C.purple, bg: C.purpleLight };
+    if (type === 'Loan Disbursement') return { icon: 'arrow-down-circle-outline', color: C.green, bg: C.greenLight };
+    return { icon: 'help-circle-outline', color: C.subtext, bg: C.faint };
   };
 
-  const getIconColor = (status) => {
-    return status === 'Failed' ? '#EF4444' : '#8B5CF6';
-  };
-
-  const viewReceipt = (transaction) => {
-    setSelectedTransaction(transaction);
-    setReceiptVisible(true);
-  };
-
-  const renderTransactionItem = ({ item }) => (
-    <TouchableOpacity 
-      style={styles.transactionCard}
-      onPress={() => viewReceipt(item)}
-      activeOpacity={0.7}
-    >
-      <View style={[styles.transactionIcon, { backgroundColor: getIconColor(item.status) + '20' }]}>
-        <Ionicons 
-          name={getTransactionIcon(item.type, item.status)} 
-          size={24} 
-          color={getIconColor(item.status)} 
-        />
-      </View>
-      <View style={styles.transactionInfo}>
-        <Text style={styles.transactionType}>{item.type}</Text>
-        <Text style={styles.transactionDate}>{item.date} • {item.time}</Text>
-        <Text style={styles.transactionLoan}>Loan: {item.loanId}</Text>
-      </View>
-      <View style={styles.transactionAmountContainer}>
-        <Text style={[
-          styles.transactionAmount,
-          item.status === 'Failed' && styles.transactionAmountFailed
-        ]}>
-          ₱{item.amount}
-        </Text>
-        <View style={[
-          styles.transactionStatus,
-          item.status === 'Completed' && styles.statusCompleted,
-          item.status === 'Failed' && styles.statusFailed
-        ]}>
-          <Text style={[
-            styles.statusText,
-            item.status === 'Completed' && styles.statusTextCompleted,
-            item.status === 'Failed' && styles.statusTextFailed
-          ]}>
-            {item.status}
-          </Text>
+  const renderItem = useCallback(({ item }) => {
+    const config = getTypeConfig(item.type, item.status);
+    const isCompleted = item.status === 'Completed';
+    const isFailed = item.status === 'Failed';
+    return (
+      <TouchableOpacity
+        style={[styles.txCard, { backgroundColor: C.card, shadowColor: C.shadow }]}
+        onPress={() => { setSelectedTx(item); setReceiptVisible(true); }}
+        activeOpacity={0.75}
+      >
+        <View style={[styles.txIcon, { backgroundColor: config.bg }]}>
+          <Ionicons name={config.icon} size={22} color={config.color} />
         </View>
-      </View>
-    </TouchableOpacity>
-  );
 
-  const ReceiptModal = () => (
-    <Modal
-      visible={receiptVisible}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={() => setReceiptVisible(false)}
-    >
-      <View style={styles.modalContainer}>
-        <View style={styles.receiptContainer}>
-          <View style={styles.receiptHeader}>
-            <Text style={styles.receiptTitle}>Transaction Receipt</Text>
-            <TouchableOpacity 
-              onPress={() => setReceiptVisible(false)}
-              style={styles.closeButton}
-              disabled={isDownloading}
-            >
-              <Ionicons name="close" size={24} color="#333" />
-            </TouchableOpacity>
+        <View style={styles.txInfo}>
+          <Text style={[styles.txType, { color: C.text }]}>{item.type}</Text>
+          <Text style={[styles.txMeta, { color: C.subtext }]}>{item.date} · {item.time}</Text>
+          <View style={styles.txTagRow}>
+            <View style={[styles.txTag, { backgroundColor: C.faint }]}>
+              <Text style={[styles.txTagText, { color: C.subtext }]}>{item.loanId}</Text>
+            </View>
+            {item.creditPointsEarned > 0 && (
+              <View style={[styles.txTag, { backgroundColor: C.amberLight }]}>
+                <MaterialIcons name="star" size={10} color={C.amberText} />
+                <Text style={[styles.txTagText, { color: C.amberText }]}>+{item.creditPointsEarned} pts</Text>
+              </View>
+            )}
           </View>
-          
-          <ScrollView style={styles.receiptContent}>
-            {selectedTransaction && (
-              <>
-                <View style={styles.receiptSection}>
-                  <View style={styles.receiptTitleContainer}>
-                    <MaterialIcons name="receipt" size={24} color="#4F46E5" />
-                    <Text style={styles.receiptTitle}>Loan Receipt</Text>
-                    <View style={styles.statusBadge}>
-                      <MaterialIcons
-                        name={selectedTransaction.status === 'Completed' ? 'check-circle' : 'close-circle'}
-                        size={16}
-                        color={selectedTransaction.status === 'Completed' ? '#10B981' : '#EF4444'}
-                      />
-                      <Text style={[
-                        styles.statusText,
-                        { color: selectedTransaction.status === 'Completed' ? '#10B981' : '#EF4444' }
-                      ]}>
-                        {selectedTransaction.status}
-                      </Text>
-                    </View>
-                  </View>
+        </View>
 
-                  <View style={styles.receiptSummary}>
-                    <Text style={styles.receiptNumber}>Receipt #{selectedTransaction.transactionId || selectedTransaction.id}</Text>
-                    <Text style={styles.receiptDate}>
-                      {selectedTransaction.date} • {selectedTransaction.time}
-                    </Text>
-                  </View>
-                </View>
+        <View style={styles.txRight}>
+          <Text style={[styles.txAmount, { color: isFailed ? C.red : C.text }]}>
+            ₱{item.amount}
+          </Text>
+          <View style={[
+            styles.statusPill,
+            { backgroundColor: isCompleted ? C.greenLight : isFailed ? C.redLight : C.faint }
+          ]}>
+            <Text style={[
+              styles.statusPillText,
+              { color: isCompleted ? C.greenText : isFailed ? C.redText : C.subtext }
+            ]}>
+              {item.status}
+            </Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  }, [C]);
 
-                <View style={styles.receiptDivider} />
+  // ─── Receipt Modal ───────────────────────────────────────────────────────────
+  const ReceiptModal = () => {
+    if (!selectedTx) return null;
+    const isCompleted = selectedTx.status === 'Completed';
+    return (
+      <Modal
+        visible={receiptVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setReceiptVisible(false)}
+      >
+        <View style={[styles.overlay, { backgroundColor: C.overlay }]}>
+          <View style={[styles.sheet, { backgroundColor: C.modalBg }]}>
+            {/* Sheet Handle */}
+            <View style={[styles.handle, { backgroundColor: C.border }]} />
 
-                {/* Transaction Details */}
-                <View style={styles.receiptSection}>
-                  <Text style={styles.receiptSectionTitle}>Transaction Details</Text>
-                  <View style={styles.receiptDetailRow}>
-                    <Text style={styles.receiptDetailLabel}>Type:</Text>
-                    <Text style={styles.receiptDetailValue}>{selectedTransaction.type}</Text>
-                  </View>
-                  <View style={styles.receiptDetailRow}>
-                    <Text style={styles.receiptDetailLabel}>Amount:</Text>
-                    <Text style={[styles.receiptDetailValue, styles.amountText]}>
-                      ₱{selectedTransaction.amount}
-                    </Text>
-                  </View>
-                  <View style={styles.receiptDetailRow}>
-                    <Text style={styles.receiptDetailLabel}>Payment Method:</Text>
-                    <Text style={styles.receiptDetailValue}>{selectedTransaction.paymentMethod || 'N/A'}</Text>
-                  </View>
-                  {selectedTransaction.status === 'Failed' && selectedTransaction.failureReason && (
-                    <View style={styles.receiptDetailRow}>
-                      <Text style={[styles.receiptDetailLabel, styles.errorLabel]}>Failure Reason:</Text>
-                      <Text style={[styles.receiptDetailValue, styles.errorText]}>
-                        {selectedTransaction.failureReason}
-                      </Text>
-                    </View>
-                  )}
-                </View>
+            {/* Sheet Header */}
+            <View style={[styles.sheetHeader, { borderBottomColor: C.border }]}>
+              <View style={styles.sheetHeaderLeft}>
+                <MaterialIcons name="receipt" size={20} color={C.purple} />
+                <Text style={[styles.sheetTitle, { color: C.text }]}>Transaction Receipt</Text>
+              </View>
+              <TouchableOpacity onPress={() => setReceiptVisible(false)} style={styles.closeBtn}>
+                <Ionicons name="close" size={22} color={C.subtext} />
+              </TouchableOpacity>
+            </View>
 
-                <View style={styles.receiptDivider} />
-
-                {/* Loan Information */}
-                <View style={styles.receiptSection}>
-                  <Text style={styles.receiptSectionTitle}>Loan Information</Text>
-                  <View style={styles.receiptDetailRow}>
-                    <Text style={styles.receiptDetailLabel}>Loan ID:</Text>
-                    <Text style={styles.receiptDetailValue}>{selectedTransaction.loanId}</Text>
-                  </View>
-                  <View style={styles.receiptDetailRow}>
-                    <Text style={styles.receiptDetailLabel}>Loan Type:</Text>
-                    <Text style={styles.receiptDetailValue}>{selectedTransaction.loanType || 'N/A'}</Text>
-                  </View>
-                  <View style={styles.receiptDetailRow}>
-                    <Text style={styles.receiptDetailLabel}>Lender:</Text>
-                    <Text style={styles.receiptDetailValue}>{selectedTransaction.lender || 'N/A'}</Text>
-                  </View>
-                  <View style={styles.receiptDetailRow}>
-                    <Text style={styles.receiptDetailLabel}>Application Date:</Text>
-                    <Text style={styles.receiptDetailValue}>{selectedTransaction.applicationDate || 'N/A'}</Text>
-                  </View>
-                </View>
-
-                {selectedTransaction.loanAmount && (
-                  <>
-                    <View style={styles.receiptDivider} />
-
-                    {/* Loan Terms & Breakdown */}
-                    <View style={styles.receiptSection}>
-                      <Text style={styles.receiptSectionTitle}>Loan Terms & Breakdown</Text>
-                      <View style={styles.receiptDetailRow}>
-                        <Text style={styles.receiptDetailLabel}>Principal Amount:</Text>
-                        <Text style={styles.receiptDetailValueAmount}>
-                          ₱{selectedTransaction.loanAmount.toLocaleString()}
-                        </Text>
-                      </View>
-                      <View style={styles.receiptDetailRow}>
-                        <Text style={styles.receiptDetailLabel}>Loan Term:</Text>
-                        <Text style={styles.receiptDetailValue}>
-                          {selectedTransaction.term || 'N/A'}
-                        </Text>
-                      </View>
-                      {selectedTransaction.interestRate && (
-                        <View style={styles.receiptDetailRow}>
-                          <Text style={styles.receiptDetailLabel}>Interest Rate:</Text>
-                          <Text style={styles.receiptDetailValue}>{selectedTransaction.interestRate}%</Text>
-                        </View>
-                      )}
-                      {selectedTransaction.interestType && (
-                        <View style={styles.receiptDetailRow}>
-                          <Text style={styles.receiptDetailLabel}>Interest Type:</Text>
-                          <Text style={styles.receiptDetailValue}>{selectedTransaction.interestType}</Text>
-                        </View>
-                      )}
-                      {selectedTransaction.totalInterest && (
-                        <View style={styles.receiptDetailRow}>
-                          <Text style={styles.receiptDetailLabel}>Total Interest:</Text>
-                          <Text style={styles.receiptDetailValueAmount}>₱{selectedTransaction.totalInterest.toFixed(2)}</Text>
-                        </View>
-                      )}
-                      {selectedTransaction.processingFee && (
-                        <View style={styles.receiptDetailRow}>
-                          <Text style={styles.receiptDetailLabel}>Processing Fee:</Text>
-                          <Text style={styles.receiptDetailValueAmount}>₱{selectedTransaction.processingFee.toFixed(2)}</Text>
-                        </View>
-                      )}
-                      {selectedTransaction.netRelease && (
-                        <View style={styles.receiptHighlightRow}>
-                          <Text style={styles.receiptHighlightLabel}>Net Amount Received:</Text>
-                          <Text style={styles.receiptNetReleaseValue}>₱{selectedTransaction.netRelease.toFixed(2)}</Text>
-                        </View>
-                      )}
-                    </View>
-                  </>
-                )}
-
-                <View style={styles.receiptFooter}>
-                  <Text style={styles.footerText}>Thank you for your transaction</Text>
-                  <Text style={styles.footerNote}>
-                    This receipt is proof of your transaction. Please keep it for your records.
+            <ScrollView style={styles.sheetScroll} showsVerticalScrollIndicator={false}>
+              {/* Status Badge */}
+              <View style={styles.receiptTop}>
+                <View style={[
+                  styles.statusLarge,
+                  { backgroundColor: isCompleted ? C.greenLight : C.redLight }
+                ]}>
+                  <Ionicons
+                    name={isCompleted ? 'checkmark-circle' : 'close-circle'}
+                    size={32}
+                    color={isCompleted ? C.green : C.red}
+                  />
+                  <Text style={[styles.statusLargeText, { color: isCompleted ? C.greenText : C.redText }]}>
+                    {selectedTx.status}
                   </Text>
                 </View>
-              </>
-            )}
-          </ScrollView>
-          
-          <View style={styles.receiptActions}>
-            <TouchableOpacity 
-              style={[styles.downloadButton, isDownloading && styles.downloadButtonDisabled]}
-              onPress={() => downloadReceiptAsPDF(selectedTransaction)}
-              disabled={isDownloading}
-            >
-              {isDownloading ? (
-                <>
-                  <Ionicons name="cloud-download-outline" size={20} color="#FFF" />
-                  <Text style={styles.downloadButtonText}>Generating PDF...</Text>
-                </>
-              ) : (
-                <>
-                  <Ionicons name="download-outline" size={20} color="#FFF" />
-                  <Text style={styles.downloadButtonText}>Download PDF Receipt</Text>
-                </>
+                <Text style={[styles.receiptId, { color: C.subtext }]}>
+                  #{selectedTx.transactionId || selectedTx.id}
+                </Text>
+                <Text style={[styles.receiptDate, { color: C.subtext }]}>
+                  {selectedTx.date} · {selectedTx.time}
+                </Text>
+              </View>
+
+              {/* Amount Hero */}
+              <View style={[styles.amountHero, { backgroundColor: C.purpleLight }]}>
+                <Text style={[styles.amountHeroLabel, { color: C.purple }]}>Amount</Text>
+                <Text style={[styles.amountHeroVal, { color: C.purple }]}>₱{selectedTx.amount}</Text>
+                <Text style={[styles.amountHeroType, { color: C.subtext }]}>{selectedTx.type}</Text>
+              </View>
+
+              {/* Transaction Info */}
+              <ReceiptSection title="Transaction Details" color={C}>
+                <ReceiptRow label="Payment Method" value={selectedTx.paymentMethod || 'N/A'} C={C} />
+                <ReceiptRow label="Loan ID" value={selectedTx.loanId} C={C} />
+                <ReceiptRow label="Loan Type" value={selectedTx.loanType || 'N/A'} C={C} />
+                <ReceiptRow label="Lender" value={selectedTx.lender || 'N/A'} C={C} />
+                <ReceiptRow label="Application Date" value={selectedTx.applicationDate || 'N/A'} C={C} />
+                {selectedTx.failureReason && (
+                  <View style={[styles.errorRow, { backgroundColor: C.redLight }]}>
+                    <Ionicons name="warning-outline" size={14} color={C.red} />
+                    <Text style={[styles.errorText, { color: C.redText }]}>{selectedTx.failureReason}</Text>
+                  </View>
+                )}
+              </ReceiptSection>
+
+              {/* Loan Breakdown */}
+              {selectedTx.loanAmount ? (
+                <ReceiptSection title="Loan Breakdown" color={C}>
+                  <ReceiptRow label="Principal Amount" value={`₱${selectedTx.loanAmount.toLocaleString()}`} C={C} highlight />
+                  <ReceiptRow label="Term" value={selectedTx.term} C={C} />
+                  <ReceiptRow label="Interest Rate" value={`${selectedTx.interestRate}% ${selectedTx.interestType}`} C={C} />
+                  <ReceiptRow label="Total Interest" value={`₱${selectedTx.totalInterest?.toFixed(2)}`} C={C} />
+                  <ReceiptRow label="Processing Fee" value={`₱${selectedTx.processingFee?.toFixed(2)}`} C={C} />
+                  {/* Net Release highlight */}
+                  <View style={[styles.netRow, { backgroundColor: C.purpleLight }]}>
+                    <Text style={[styles.netLabel, { color: C.purple }]}>Net Amount Released</Text>
+                    <Text style={[styles.netVal, { color: C.purple }]}>₱{selectedTx.netRelease?.toFixed(2)}</Text>
+                  </View>
+                </ReceiptSection>
+              ) : null}
+
+              {/* Credit Points */}
+              {selectedTx.creditPointsEarned > 0 && (
+                <View style={[styles.ptsBox, { backgroundColor: C.amberLight, borderColor: `${C.amber}60` }]}>
+                  <MaterialIcons name="star" size={20} color={C.amber} />
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    <Text style={[styles.ptsTitle, { color: C.amberText }]}>
+                      +{selectedTx.creditPointsEarned} Credit Points Earned
+                    </Text>
+                    <Text style={[styles.ptsSub, { color: C.amberText }]}>
+                      {selectedTx.type === 'Payment'
+                        ? 'On-time repayment — fastest way to grow your score!'
+                        : 'Every transaction grows your credit score.'}
+                    </Text>
+                    <Text style={[styles.ptsMini, { color: C.amber }]}>
+                      +20 pts/loan payment · +5 pts/transaction · 5 repayments = next tier 🚀
+                    </Text>
+                  </View>
+                </View>
               )}
-            </TouchableOpacity>
+
+              {/* Footer */}
+              <View style={styles.receiptFooter}>
+                <Ionicons name="shield-checkmark-outline" size={16} color={C.subtext} />
+                <Text style={[styles.footerText, { color: C.subtext }]}>
+                  Verified by Lora Finance · RightApp Inc.
+                </Text>
+              </View>
+            </ScrollView>
+
+            {/* Download Button */}
+            <View style={[styles.sheetActions, { borderTopColor: C.border, backgroundColor: C.modalBg }]}>
+              <TouchableOpacity
+                style={[styles.downloadBtn, { backgroundColor: isDownloading ? C.subtext : C.purple }]}
+                onPress={() => downloadPDF(selectedTx)}
+                disabled={isDownloading}
+              >
+                <Ionicons name={isDownloading ? 'cloud-download-outline' : 'download-outline'} size={18} color="#fff" />
+                <Text style={styles.downloadBtnText}>
+                  {isDownloading ? 'Generating PDF…' : 'Download PDF Receipt'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-      </View>
-    </Modal>
-  );
+      </Modal>
+    );
+  };
 
+  // ─── Render ──────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.headerContainer}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#333" />
+    <SafeAreaView style={[styles.root, { backgroundColor: C.bg }]} edges={['top', 'left', 'right']}>
+      <StatusBar barStyle={d ? 'light-content' : 'dark-content'} backgroundColor={C.bg} />
+
+      {/* Header */}
+      <View style={[styles.header, { backgroundColor: C.card, borderBottomColor: C.border }]}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={24} color={C.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Transaction History</Text>
-        <View style={styles.headerSpacer} />
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.headerTitle, { color: C.text }]}>{screenTitle}</Text>
+          <Text style={[styles.headerSub, { color: C.subtext }]}>{screenSubtitle}</Text>
+        </View>
       </View>
-      
+
+      {/* Summary Strip */}
+      <View style={[styles.summaryStrip, { backgroundColor: C.card, borderBottomColor: C.border }]}>
+        <View style={styles.summaryItem}>
+          <Text style={[styles.summaryVal, { color: C.green }]}>{successCount}</Text>
+          <Text style={[styles.summaryLabel, { color: C.subtext }]}>Completed</Text>
+        </View>
+        <View style={[styles.summaryDivider, { backgroundColor: C.border }]} />
+        <View style={styles.summaryItem}>
+          <Text style={[styles.summaryVal, { color: C.red }]}>{failedCount}</Text>
+          <Text style={[styles.summaryLabel, { color: C.subtext }]}>Failed</Text>
+        </View>
+        <View style={[styles.summaryDivider, { backgroundColor: C.border }]} />
+        <View style={styles.summaryItem}>
+          <Text style={[styles.summaryVal, { color: C.amber }]}>{totalPoints}</Text>
+          <Text style={[styles.summaryLabel, { color: C.subtext }]}>Points Earned</Text>
+        </View>
+      </View>
+
+      {/* Filter Tabs */}
+      <View style={[styles.filterRow, { backgroundColor: C.card, borderBottomColor: C.border }]}>
+        {[
+          { key: 'all', label: 'All' },
+          { key: 'payments', label: 'Payments' },
+          { key: 'disbursements', label: 'Disbursements' },
+          { key: 'failed', label: 'Failed' },
+        ].map(tab => (
+          <TouchableOpacity
+            key={tab.key}
+            style={[styles.filterChip, txFilter === tab.key && { backgroundColor: C.purpleLight }]}
+            onPress={() => setTxFilter(tab.key)}
+          >
+            <Text style={[
+              styles.filterChipText,
+              { color: txFilter === tab.key ? C.purple : C.subtext }
+            ]}>
+              {tab.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       <FlatList
         data={transactions}
-        renderItem={renderTransactionItem}
+        renderItem={renderItem}
         keyExtractor={item => item.id}
-        contentContainerStyle={styles.transactionList}
+        contentContainerStyle={styles.list}
+        showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Ionicons name="receipt-outline" size={64} color="#CCC" />
-            <Text style={styles.emptyStateText}>No transactions found</Text>
+          <View style={styles.empty}>
+            <Ionicons name="receipt-outline" size={52} color={C.subtext} />
+            <Text style={[styles.emptyTitle, { color: C.text }]}>No transactions</Text>
+            <Text style={[styles.emptySub, { color: C.subtext }]}>
+              No records match the selected filter
+            </Text>
           </View>
         }
-        showsVerticalScrollIndicator={false}
       />
-      
+
       <ReceiptModal />
     </SafeAreaView>
   );
 };
 
+// ─── Helper Components ────────────────────────────────────────────────────────
+
+const ReceiptSection = ({ title, color: C, children }) => (
+  <View style={styles.section}>
+    <Text style={[styles.sectionTitle, { color: C.purple, borderBottomColor: C.border }]}>{title}</Text>
+    {children}
+  </View>
+);
+
+const ReceiptRow = ({ label, value, C, highlight }) => (
+  <View style={styles.receiptRow}>
+    <Text style={[styles.receiptLabel, { color: C.subtext }]}>{label}</Text>
+    <Text style={[styles.receiptVal, { color: highlight ? C.purple : C.text }]}>{value}</Text>
+  </View>
+);
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F5F5F5',
-  },
-  headerContainer: {
+  root: { flex: 1 },
+
+  // Header
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: 'white',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#EEE',
   },
-  backButton: {
-    marginRight: 16,
+  backBtn: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center', borderRadius: 18 },
+  headerTitle: { fontSize: 17, fontWeight: '700' },
+  headerSub: { fontSize: 11, marginTop: 1 },
+
+  // Summary Strip
+  summaryStrip: {
+    flexDirection: 'row',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
+  summaryItem: { flex: 1, alignItems: 'center' },
+  summaryVal: { fontSize: 18, fontWeight: '800' },
+  summaryLabel: { fontSize: 11, fontWeight: '500', marginTop: 1 },
+  summaryDivider: { width: 1, marginVertical: 4 },
+
+  // Filter
+  filterRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 6,
+    borderBottomWidth: 1,
   },
-  headerSpacer: {
-    width: 40,
-  },
-  transactionList: {
-    padding: 16,
-    flexGrow: 1,
-  },
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
-  },
-  emptyStateText: {
-    fontSize: 16,
-    color: '#666',
-    marginTop: 16,
-  },
-  transactionCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+  filterChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
+  filterChipText: { fontSize: 12, fontWeight: '600' },
+
+  // Transaction List
+  list: { padding: 14, gap: 10, paddingBottom: 32, flexGrow: 1 },
+
+  txCard: {
+    borderRadius: 14,
+    padding: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
+    gap: 12,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+    shadowOpacity: 1,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  transactionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
+  txIcon: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+  txInfo: { flex: 1 },
+  txType: { fontSize: 14, fontWeight: '600', marginBottom: 2 },
+  txMeta: { fontSize: 11, marginBottom: 5 },
+  txTagRow: { flexDirection: 'row', gap: 5 },
+  txTag: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 },
+  txTagText: { fontSize: 10, fontWeight: '600' },
+
+  txRight: { alignItems: 'flex-end', gap: 5 },
+  txAmount: { fontSize: 15, fontWeight: '700' },
+  statusPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
+  statusPillText: { fontSize: 10, fontWeight: '700' },
+
+  // Empty
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
+  emptyTitle: { fontSize: 16, fontWeight: '600', marginTop: 12, marginBottom: 4 },
+  emptySub: { fontSize: 12, textAlign: 'center' },
+
+  // Modal / Sheet
+  overlay: { flex: 1, justifyContent: 'flex-end' },
+  sheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '92%',
+    minHeight: '50%',
   },
-  transactionInfo: {
-    flex: 1,
-  },
-  transactionType: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
-    marginBottom: 4,
-  },
-  transactionDate: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 4,
-  },
-  transactionLoan: {
-    fontSize: 12,
-    color: '#8B5CF6',
-  },
-  transactionAmountContainer: {
-    alignItems: 'flex-end',
-  },
-  transactionAmount: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  transactionAmountFailed: {
-    color: '#EF4444',
-  },
-  transactionStatus: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    minWidth: 80,
-    alignItems: 'center',
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  statusCompleted: {
-    backgroundColor: '#DCFCE7',
-  },
-  statusTextCompleted: {
-    color: '#166534',
-  },
-  statusFailed: {
-    backgroundColor: '#FEE2E2',
-  },
-  statusTextFailed: {
-    color: '#B91C1C',
-  },
-  // Receipt Modal Styles
-  modalContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  receiptContainer: {
-    backgroundColor: 'white',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '90%',
-  },
-  receiptHeader: {
+  handle: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginTop: 10, marginBottom: 4 },
+  sheetHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#EEE',
   },
-  receiptTitleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
+  sheetHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sheetTitle: { fontSize: 16, fontWeight: '700' },
+  closeBtn: { padding: 4 },
+  sheetScroll: { paddingHorizontal: 20 },
+
+  receiptTop: { alignItems: 'center', paddingVertical: 20 },
+  statusLarge: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, marginBottom: 10 },
+  statusLargeText: { fontSize: 15, fontWeight: '700' },
+  receiptId: { fontSize: 13, fontWeight: '600', marginBottom: 2 },
+  receiptDate: { fontSize: 11 },
+
+  amountHero: { borderRadius: 14, padding: 16, alignItems: 'center', marginBottom: 20 },
+  amountHeroLabel: { fontSize: 11, fontWeight: '600', marginBottom: 4 },
+  amountHeroVal: { fontSize: 32, fontWeight: '800', letterSpacing: -1 },
+  amountHeroType: { fontSize: 12, marginTop: 2 },
+
+  section: { marginBottom: 20 },
+  sectionTitle: { fontSize: 13, fontWeight: '700', borderBottomWidth: 1, paddingBottom: 8, marginBottom: 12 },
+  receiptRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 9 },
+  receiptLabel: { fontSize: 13, flex: 1 },
+  receiptVal: { fontSize: 13, fontWeight: '600', textAlign: 'right', flex: 1 },
+
+  errorRow: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 10, borderRadius: 8, marginTop: 4 },
+  errorText: { fontSize: 12, fontWeight: '500', flex: 1 },
+
+  netRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, borderRadius: 10, marginTop: 6 },
+  netLabel: { fontSize: 13, fontWeight: '700' },
+  netVal: { fontSize: 16, fontWeight: '800' },
+
+  ptsBox: { flexDirection: 'row', alignItems: 'flex-start', borderWidth: 1, borderRadius: 12, padding: 14, marginBottom: 20 },
+  ptsTitle: { fontSize: 13, fontWeight: '700', marginBottom: 3 },
+  ptsSub: { fontSize: 12, lineHeight: 17, marginBottom: 4 },
+  ptsMini: { fontSize: 11 },
+
+  receiptFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingBottom: 24, paddingTop: 8 },
+  footerText: { fontSize: 11 },
+
+  sheetActions: { padding: 16, borderTopWidth: 1 },
+  downloadBtn: {
+    flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8,
+    padding: 15, borderRadius: 12,
   },
-  receiptTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginLeft: 8,
-    marginRight: 12,
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  closeButton: {
-    padding: 4,
-  },
-  receiptContent: {
-    padding: 20,
-  },
-  receiptSummary: {
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  receiptNumber: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    marginBottom: 4,
-  },
-  receiptDate: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  receiptDivider: {
-    height: 1,
-    backgroundColor: '#E5E7EB',
-    marginVertical: 16,
-  },
-  receiptSection: {
-    marginBottom: 16,
-  },
-  receiptSectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 12,
-  },
-  receiptDetailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  receiptDetailLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-    flex: 1,
-  },
-  receiptDetailValue: {
-    fontSize: 14,
-    color: '#1F2937',
-    fontWeight: '500',
-    textAlign: 'right',
-    flex: 1,
-  },
-  receiptDetailValueAmount: {
-    fontSize: 14,
-    color: '#1F2937',
-    fontWeight: '600',
-    textAlign: 'right',
-    flex: 1,
-  },
-  amountText: {
-    color: '#8B5CF6',
-    fontWeight: 'bold',
-  },
-  errorLabel: {
-    color: '#EF4444',
-  },
-  errorText: {
-    color: '#EF4444',
-    fontWeight: '500',
-  },
-  receiptHighlightRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-    backgroundColor: '#F0F9FF',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 8,
-  },
-  receiptHighlightLabel: {
-    fontSize: 14,
-    color: '#1F2937',
-    fontWeight: '600',
-    flex: 1,
-  },
-  receiptNetReleaseValue: {
-    fontSize: 14,
-    color: '#10B981',
-    fontWeight: 'bold',
-    textAlign: 'right',
-    flex: 1,
-  },
-  receiptFooter: {
-    marginTop: 24,
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#EEE',
-    alignItems: 'center',
-  },
-  footerText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#333',
-    marginBottom: 8,
-  },
-  footerNote: {
-    fontSize: 12,
-    color: '#666',
-    textAlign: 'center',
-  },
-  receiptActions: {
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#EEE',
-  },
-  downloadButton: {
-    backgroundColor: '#8B5CF6',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 12,
-  },
-  downloadButtonDisabled: {
-    backgroundColor: '#9CA3AF',
-  },
-  downloadButtonText: {
-    color: 'white',
-    fontWeight: '600',
-    marginLeft: 8,
-  },
+  downloadBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 });
 
 export default TransactionsScreen;

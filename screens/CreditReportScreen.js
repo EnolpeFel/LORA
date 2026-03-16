@@ -1,1136 +1,487 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
-  Dimensions,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  Modal,
-  Alert
+  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  Animated, Easing,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 
-const { width } = Dimensions.get('window');
+// ─── Credit Score & Loan Tier System (RightApp Inc. — Lora App) ───────────────
+const CREDIT_TIERS = [
+  { min: 200, max: 299, maxLoan: 5000,  label: 'Starter', color: '#6B7280' },
+  { min: 300, max: 399, maxLoan: 10000, label: 'Bronze',  color: '#F59E0B' },
+  { min: 400, max: 499, maxLoan: 20000, label: 'Silver',  color: '#8B5CF6' },
+  { min: 500, max: 850, maxLoan: 50000, label: 'Gold',    color: '#10B981' },
+];
+const getCreditTier = (score) =>
+  CREDIT_TIERS.find(t => score >= t.min && score <= t.max) || CREDIT_TIERS[0];
+const getPointsToNextTier = (score) => {
+  const nextTier = CREDIT_TIERS.find(t => t.min > score);
+  return nextTier ? nextTier.min - score : 0;
+};
 
-const CreditReportScreen = ({ navigation, route }) => {
-  const [activeSection, setActiveSection] = useState('overview');
-  const [showAlertModal, setShowAlertModal] = useState(false);
-  const [selectedAlert, setSelectedAlert] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
+// ─── Lora App Credit Report Data ──────────────────────────────────────────────
+const CREDIT_REPORT = {
+  owner: 'Juan dela Cruz',
+  generatedDate: 'March 10, 2026',
+  score: 560,
+  scoreMax: 850,
+  scoreRating: 'Gold',
+  scoreColor: '#10B981',
 
-  // Mock credit report data - in real app, this would come from API
-  const creditReportData = {
-    personalInfo: {
-      fullName: 'Juan Dela Cruz',
-      dateOfBirth: 'January 15, 1990',
-      address: '123 Main Street, Manila, Philippines',
-      phoneNumber: '+63 912 345 6789',
-      email: 'juan.delacruz@example.com',
-      reportDate: new Date().toLocaleDateString(),
-      reportNumber: 'CR-2025-001234'
+  summary: {
+    totalLoans: 4,
+    activeLoans: 1,
+    completedLoans: 3,
+    totalBorrowed: 275000,
+    totalRepaid: 245000,
+    outstandingBalance: 30000,
+    onTimePayments: 96,
+    missedPayments: 1,
+    memberSince: 'January 2024',
+  },
+
+  accounts: [
+    {
+      id: 1, name: 'Lora Personal Loan', type: 'Personal Loan',
+      icon: 'account-balance', color: '#F97316', status: 'Open',
+      balance: 30000, limit: 50000, utilization: 60,
+      paymentStatus: 'Current', openedDate: 'January 2026',
     },
-    creditScore: {
-      current: 720,
-      previous: 705,
-      trend: 'up',
-      range: 'Good',
-      lastUpdated: '2025-09-15'
+    {
+      id: 2, name: 'Lora Emergency Loan', type: 'Emergency Loan',
+      icon: 'local-hospital', color: '#EF4444', status: 'Closed',
+      balance: 0, limit: 0, utilization: 0,
+      paymentStatus: 'Fully Paid', openedDate: 'September 2025',
     },
-    scoreHistory: [
-      { month: 'Mar', score: 680 },
-      { month: 'Apr', score: 690 },
-      { month: 'May', score: 700 },
-      { month: 'Jun', score: 705 },
-      { month: 'Jul', score: 710 },
-      { month: 'Aug', score: 715 },
-      { month: 'Sep', score: 720 }
-    ],
-    creditFactors: [
-      {
-        factor: 'Payment History',
-        weight: 35,
-        score: 85,
-        status: 'Excellent',
-        color: '#10B981',
-        description: 'You have a perfect payment history with no late payments in the last 24 months.'
-      },
-      {
-        factor: 'Credit Utilization',
-        weight: 30,
-        score: 70,
-        status: 'Good',
-        color: '#F59E0B',
-        description: 'Your credit utilization is 25%. Consider keeping it below 10% for excellent scores.'
-      },
-      {
-        factor: 'Credit History Length',
-        weight: 15,
-        score: 60,
-        status: 'Fair',
-        color: '#8B5CF6',
-        description: 'Your average account age is 3 years. Older accounts help improve your score.'
-      },
-      {
-        factor: 'Credit Mix',
-        weight: 10,
-        score: 75,
-        status: 'Good',
-        color: '#10B981',
-        description: 'You have a good mix of credit cards, loans, and other credit types.'
-      },
-      {
-        factor: 'New Credit Inquiries',
-        weight: 10,
-        score: 80,
-        status: 'Very Good',
-        color: '#10B981',
-        description: 'You have minimal recent credit inquiries, which is good for your score.'
-      }
-    ],
-    accounts: [
-      {
-        id: 1,
-        type: 'Credit Card',
-        institution: 'BPI Credit Card',
-        accountNumber: '****-****-****-1234',
-        status: 'Active',
-        balance: 45000,
-        creditLimit: 180000,
-        utilization: 25,
-        openDate: '2022-03-15',
-        lastPayment: '2025-09-01',
-        paymentHistory: 'Excellent'
-      },
-      {
-        id: 2,
-        type: 'Personal Loan',
-        institution: 'Metrobank',
-        accountNumber: '****-****-5678',
-        status: 'Active',
-        balance: 120000,
-        originalAmount: 200000,
-        monthlyPayment: 8500,
-        openDate: '2024-01-10',
-        lastPayment: '2025-09-05',
-        paymentHistory: 'Good'
-      },
-      {
-        id: 3,
-        type: 'Auto Loan',
-        institution: 'Toyota Financial',
-        accountNumber: '****-****-9012',
-        status: 'Closed',
-        balance: 0,
-        originalAmount: 800000,
-        openDate: '2020-06-20',
-        closeDate: '2024-06-20',
-        paymentHistory: 'Excellent'
-      }
-    ],
-    inquiries: [
-      {
-        id: 1,
-        type: 'Hard Inquiry',
-        institution: 'UnionBank Credit Card',
-        date: '2025-08-15',
-        purpose: 'Credit Card Application'
-      },
-      {
-        id: 2,
-        type: 'Soft Inquiry',
-        institution: 'Lora Financial',
-        date: '2025-09-10',
-        purpose: 'Pre-qualification Check'
-      }
-    ],
-    alerts: [
-      {
-        id: 1,
-        type: 'positive',
-        title: 'Credit Score Improved',
-        message: 'Your credit score increased by 15 points this month',
-        date: '2025-09-15',
-        severity: 'info'
-      },
-      {
-        id: 2,
-        type: 'warning',
-        title: 'High Credit Utilization',
-        message: 'Your BPI Credit Card utilization is at 25%. Consider paying down the balance.',
-        date: '2025-09-10',
-        severity: 'warning'
-      },
-      {
-        id: 3,
-        type: 'action',
-        title: 'New Credit Inquiry',
-        message: 'A new hard inquiry was added to your report from UnionBank.',
-        date: '2025-08-15',
-        severity: 'info'
-      }
-    ],
-    recommendations: [
-      {
-        id: 1,
-        title: 'Pay Down Credit Card Balance',
-        description: 'Reduce your BPI Credit Card balance to below 10% utilization to improve your score.',
-        impact: 'High',
-        timeframe: '1-2 months'
-      },
-      {
-        id: 2,
-        title: 'Keep Old Accounts Open',
-        description: 'Maintain your oldest credit accounts to improve your credit history length.',
-        impact: 'Medium',
-        timeframe: 'Ongoing'
-      },
-      {
-        id: 3,
-        title: 'Set Up Automatic Payments',
-        description: 'Ensure all payments are made on time by setting up automatic payments.',
-        impact: 'High',
-        timeframe: 'Immediate'
-      }
-    ]
-  };
+    {
+      id: 3, name: 'Lora Business Loan', type: 'Business Loan',
+      icon: 'store', color: '#3B82F6', status: 'Closed',
+      balance: 0, limit: 0, utilization: 0,
+      paymentStatus: 'Fully Paid', openedDate: 'May 2025',
+    },
+    {
+      id: 4, name: 'Lora Salary Loan', type: 'Salary Loan',
+      icon: 'payments', color: '#8B5CF6', status: 'Closed',
+      balance: 0, limit: 0, utilization: 0,
+      paymentStatus: 'Fully Paid', openedDate: 'January 2024',
+    },
+  ],
 
-  const handleRefresh = () => {
-    setRefreshing(true);
-    // Simulate API call
-    setTimeout(() => {
-      setRefreshing(false);
-      Alert.alert('Success', 'Credit report updated successfully!');
-    }, 2000);
-  };
+  factors: [
+    { label: 'Loan Repayment History', impact: 'High',   value: 96,  trend: 'up',      color: '#10B981' },
+    { label: 'Loan Utilization',        impact: 'High',   value: 60,  trend: 'down',    color: '#F59E0B' },
+    { label: 'Account Tenure',          impact: 'Medium', value: 68,  trend: 'up',      color: '#3B82F6' },
+    { label: 'Transaction Activity',    impact: 'Medium', value: 85,  trend: 'up',      color: '#8B5CF6' },
+    { label: 'Profile Completeness',    impact: 'Low',    value: 100, trend: 'neutral', color: '#6B7280' },
+  ],
 
-  const renderOverviewSection = () => (
-    <View>
-      {/* Credit Score Summary */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Credit Score Overview</Text>
-        <View style={styles.scoreOverview}>
-          <View style={styles.currentScoreContainer}>
-            <Text style={styles.currentScore}>{creditReportData.creditScore.current}</Text>
-            <Text style={styles.scoreRange}>{creditReportData.creditScore.range}</Text>
-            <View style={styles.scoreTrend}>
-              <MaterialIcons 
-                name={creditReportData.creditScore.trend === 'up' ? 'trending-up' : 'trending-down'} 
-                size={16} 
-                color={creditReportData.creditScore.trend === 'up' ? '#10B981' : '#EF4444'} 
-              />
-              <Text style={[
-                styles.scoreChange,
-                { color: creditReportData.creditScore.trend === 'up' ? '#10B981' : '#EF4444' }
-              ]}>
-                +{creditReportData.creditScore.current - creditReportData.creditScore.previous} points
-              </Text>
-            </View>
-          </View>
-          <View style={styles.scoreGauge}>
-            <View style={styles.gaugeBackground}>
-              <View style={[
-                styles.gaugeFill,
-                { width: `${(creditReportData.creditScore.current / 850) * 100}%` }
-              ]} />
-            </View>
-            <Text style={styles.gaugeLabel}>300 - 850 Range</Text>
-          </View>
-        </View>
-      </View>
+  scoreHistory: [
+    { label: 'Account Created',       score: 200, tier: 'Starter', note: 'Baseline on verification' },
+    { label: 'First Cash-In',         score: 205, tier: 'Starter', note: '+5 pts · ₱1,000 cash-in' },
+    { label: 'Salary Loan Repaid ×3', score: 265, tier: 'Starter', note: '+60 pts · 3 payments' },
+    { label: 'Bronze Tier Reached',   score: 300, tier: 'Bronze',  note: '+35 pts · 5th repayment' },
+    { label: 'Business Loan Repaid',  score: 400, tier: 'Silver',  note: '+100 pts · fully paid' },
+    { label: 'Emergency Loan Paid',   score: 500, tier: 'Gold',    note: '+100 pts · tier up!' },
+    { label: 'Current Score',         score: 560, tier: 'Gold',    note: '+60 pts · ongoing payments' },
+  ],
+};
 
-      {/* Key Factors */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Key Score Factors</Text>
-        {creditReportData.creditFactors.map((factor, index) => (
-          <View key={index} style={styles.factorCard}>
-            <View style={styles.factorHeader}>
-              <Text style={styles.factorName}>{factor.factor}</Text>
-              <View style={styles.factorBadge}>
-                <Text style={[styles.factorStatus, { color: factor.color }]}>
-                  {factor.status}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.factorProgress}>
-              <View style={styles.progressBarBackground}>
-                <View style={[
-                  styles.progressBarFill,
-                  { width: `${factor.score}%`, backgroundColor: factor.color }
-                ]} />
-              </View>
-              <Text style={styles.factorWeight}>{factor.weight}%</Text>
-            </View>
-            <Text style={styles.factorDescription}>{factor.description}</Text>
-          </View>
-        ))}
-      </View>
+// ─── Animated Score Bar ────────────────────────────────────────────────────────
+const ScoreGauge = ({ score, max, color }) => {
+  const animWidth = useRef(new Animated.Value(0)).current;
+  const pct = Math.round((score / max) * 100);
 
-      {/* Alerts Summary */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent Alerts</Text>
-          <TouchableOpacity onPress={() => setActiveSection('alerts')}>
-            <Text style={styles.seeAllText}>View All</Text>
-          </TouchableOpacity>
-        </View>
-        {creditReportData.alerts.slice(0, 2).map(alert => (
-          <TouchableOpacity 
-            key={alert.id} 
-            style={styles.alertCard}
-            onPress={() => {
-              setSelectedAlert(alert);
-              setShowAlertModal(true);
-            }}
-          >
-            <MaterialIcons 
-              name={
-                alert.severity === 'warning' ? 'warning' : 
-                alert.type === 'positive' ? 'check-circle' : 'info'
-              } 
-              size={20} 
-              color={
-                alert.severity === 'warning' ? '#F59E0B' :
-                alert.type === 'positive' ? '#10B981' : '#3B82F6'
-              } 
-            />
-            <View style={styles.alertContent}>
-              <Text style={styles.alertTitle}>{alert.title}</Text>
-              <Text style={styles.alertMessage}>{alert.message}</Text>
-              <Text style={styles.alertDate}>{alert.date}</Text>
-            </View>
-          </TouchableOpacity>
-        ))}
-      </View>
-    </View>
-  );
+  useEffect(() => {
+    Animated.timing(animWidth, {
+      toValue: pct,
+      duration: 1100,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, []);
 
-  const renderAccountsSection = () => (
-    <View>
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Credit Accounts</Text>
-        <Text style={styles.sectionSubtitle}>
-          Active and closed accounts that impact your credit score
-        </Text>
-        
-        {creditReportData.accounts.map(account => (
-          <View key={account.id} style={styles.accountCard}>
-            <View style={styles.accountHeader}>
-              <View>
-                <Text style={styles.accountType}>{account.type}</Text>
-                <Text style={styles.accountInstitution}>{account.institution}</Text>
-              </View>
-              <View style={[
-                styles.accountStatusBadge,
-                { backgroundColor: account.status === 'Active' ? '#DCFCE7' : '#F3F4F6' }
-              ]}>
-                <Text style={[
-                  styles.accountStatusText,
-                  { color: account.status === 'Active' ? '#166534' : '#6B7280' }
-                ]}>
-                  {account.status}
-                </Text>
-              </View>
-            </View>
-            
-            <Text style={styles.accountNumber}>{account.accountNumber}</Text>
-            
-            <View style={styles.accountDetails}>
-              {account.balance !== undefined && (
-                <View style={styles.accountDetailRow}>
-                  <Text style={styles.accountDetailLabel}>Current Balance:</Text>
-                  <Text style={styles.accountDetailValue}>
-                    ₱{account.balance.toLocaleString()}
-                  </Text>
-                </View>
-              )}
-              
-              {account.creditLimit && (
-                <View style={styles.accountDetailRow}>
-                  <Text style={styles.accountDetailLabel}>Credit Limit:</Text>
-                  <Text style={styles.accountDetailValue}>
-                    ₱{account.creditLimit.toLocaleString()}
-                  </Text>
-                </View>
-              )}
-              
-              {account.utilization && (
-                <View style={styles.accountDetailRow}>
-                  <Text style={styles.accountDetailLabel}>Utilization:</Text>
-                  <Text style={[
-                    styles.accountDetailValue,
-                    { color: account.utilization > 30 ? '#EF4444' : '#10B981' }
-                  ]}>
-                    {account.utilization}%
-                  </Text>
-                </View>
-              )}
-              
-              <View style={styles.accountDetailRow}>
-                <Text style={styles.accountDetailLabel}>Opened:</Text>
-                <Text style={styles.accountDetailValue}>
-                  {new Date(account.openDate).toLocaleDateString()}
-                </Text>
-              </View>
-              
-              <View style={styles.accountDetailRow}>
-                <Text style={styles.accountDetailLabel}>Payment History:</Text>
-                <Text style={[
-                  styles.accountDetailValue,
-                  { color: account.paymentHistory === 'Excellent' ? '#10B981' : '#F59E0B' }
-                ]}>
-                  {account.paymentHistory}
-                </Text>
-              </View>
-            </View>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-
-  const renderHistorySection = () => (
-    <View>
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Score History</Text>
-        <Text style={styles.sectionSubtitle}>
-          Your credit score trend over the last 7 months
-        </Text>
-        
-        <View style={styles.chartContainer}>
-          <View style={styles.chartYAxis}>
-            {[850, 700, 550, 400, 300].map(value => (
-              <Text key={value} style={styles.yAxisLabel}>{value}</Text>
-            ))}
-          </View>
-          <View style={styles.chartArea}>
-            {creditReportData.scoreHistory.map((data, index) => (
-              <View key={index} style={styles.chartColumn}>
-                <View 
-                  style={[
-                    styles.chartBar,
-                    { height: `${((data.score - 300) / 550) * 100}%` }
-                  ]} 
-                />
-                <Text style={styles.chartXLabel}>{data.month}</Text>
-                <Text style={styles.chartScoreLabel}>{data.score}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Credit Inquiries</Text>
-        <Text style={styles.sectionSubtitle}>
-          Recent credit checks by lenders
-        </Text>
-        
-        {creditReportData.inquiries.map(inquiry => (
-          <View key={inquiry.id} style={styles.inquiryCard}>
-            <View style={styles.inquiryHeader}>
-              <MaterialIcons 
-                name={inquiry.type === 'Hard Inquiry' ? 'search' : 'visibility'} 
-                size={20} 
-                color={inquiry.type === 'Hard Inquiry' ? '#EF4444' : '#6B7280'} 
-              />
-              <View style={styles.inquiryContent}>
-                <Text style={styles.inquiryType}>{inquiry.type}</Text>
-                <Text style={styles.inquiryInstitution}>{inquiry.institution}</Text>
-              </View>
-              <Text style={styles.inquiryDate}>{inquiry.date}</Text>
-            </View>
-            <Text style={styles.inquiryPurpose}>{inquiry.purpose}</Text>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-
-  const renderAlertsSection = () => (
-    <View>
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Credit Alerts</Text>
-        <Text style={styles.sectionSubtitle}>
-          Important changes and notifications about your credit
-        </Text>
-        
-        {creditReportData.alerts.map(alert => (
-          <TouchableOpacity 
-            key={alert.id} 
-            style={styles.alertCard}
-            onPress={() => {
-              setSelectedAlert(alert);
-              setShowAlertModal(true);
-            }}
-          >
-            <MaterialIcons 
-              name={
-                alert.severity === 'warning' ? 'warning' : 
-                alert.type === 'positive' ? 'check-circle' : 'info'
-              } 
-              size={24} 
-              color={
-                alert.severity === 'warning' ? '#F59E0B' :
-                alert.type === 'positive' ? '#10B981' : '#3B82F6'
-              } 
-            />
-            <View style={styles.alertContent}>
-              <Text style={styles.alertTitle}>{alert.title}</Text>
-              <Text style={styles.alertMessage}>{alert.message}</Text>
-              <Text style={styles.alertDate}>{alert.date}</Text>
-            </View>
-            <MaterialIcons name="chevron-right" size={20} color="#9CA3AF" />
-          </TouchableOpacity>
-        ))}
-      </View>
-    </View>
-  );
-
-  const renderRecommendationsSection = () => (
-    <View>
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Personalized Recommendations</Text>
-        <Text style={styles.sectionSubtitle}>
-          Actions you can take to improve your credit score
-        </Text>
-        
-        {creditReportData.recommendations.map(rec => (
-          <View key={rec.id} style={styles.recommendationCard}>
-            <View style={styles.recommendationHeader}>
-              <MaterialIcons name="lightbulb" size={24} color="#F59E0B" />
-              <View style={styles.recommendationContent}>
-                <Text style={styles.recommendationTitle}>{rec.title}</Text>
-                <View style={styles.recommendationMeta}>
-                  <View style={[
-                    styles.impactBadge,
-                    { 
-                      backgroundColor: rec.impact === 'High' ? '#FEE2E2' : 
-                                     rec.impact === 'Medium' ? '#FEF3C7' : '#E0E7FF'
-                    }
-                  ]}>
-                    <Text style={[
-                      styles.impactText,
-                      { 
-                        color: rec.impact === 'High' ? '#DC2626' : 
-                               rec.impact === 'Medium' ? '#D97706' : '#3730A3'
-                      }
-                    ]}>
-                      {rec.impact} Impact
-                    </Text>
-                  </View>
-                  <Text style={styles.timeframe}>{rec.timeframe}</Text>
-                </View>
-              </View>
-            </View>
-            <Text style={styles.recommendationDescription}>{rec.description}</Text>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-
-  const renderTabBar = () => (
-    <View style={styles.tabBar}>
-      {[
-        { key: 'overview', label: 'Overview', icon: 'dashboard' },
-        { key: 'accounts', label: 'Accounts', icon: 'account-balance' },
-        { key: 'history', label: 'History', icon: 'trending-up' },
-        { key: 'alerts', label: 'Alerts', icon: 'notifications' },
-        { key: 'tips', label: 'Tips', icon: 'lightbulb' }
-      ].map(tab => (
-        <TouchableOpacity
-          key={tab.key}
-          style={[
-            styles.tabItem,
-            activeSection === tab.key && styles.activeTabItem
-          ]}
-          onPress={() => setActiveSection(tab.key)}
-        >
-          <MaterialIcons 
-            name={tab.icon} 
-            size={20} 
-            color={activeSection === tab.key ? '#8B5CF6' : '#6B7280'} 
-          />
-          <Text style={[
-            styles.tabLabel,
-            activeSection === tab.key && styles.activeTabLabel
-          ]}>
-            {tab.label}
-          </Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
-
-  const renderContent = () => {
-    switch (activeSection) {
-      case 'overview':
-        return renderOverviewSection();
-      case 'accounts':
-        return renderAccountsSection();
-      case 'history':
-        return renderHistorySection();
-      case 'alerts':
-        return renderAlertsSection();
-      case 'tips':
-        return renderRecommendationsSection();
-      default:
-        return renderOverviewSection();
-    }
-  };
+  const widthInterp = animWidth.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] });
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <MaterialIcons name="arrow-back" size={24} color="#374151" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Full Credit Report</Text>
-        <TouchableOpacity onPress={handleRefresh} disabled={refreshing}>
-          <MaterialIcons 
-            name="refresh" 
-            size={24} 
-            color={refreshing ? "#9CA3AF" : "#374151"} 
-          />
-        </TouchableOpacity>
+    <View style={gS.wrapper}>
+      <View style={gS.barBg}>
+        <Animated.View style={[gS.barFill, { width: widthInterp, backgroundColor: color }]} />
       </View>
-
-      {/* Report Info */}
-      <View style={styles.reportInfo}>
-        <Text style={styles.reportDate}>
-          Report Date: {creditReportData.personalInfo.reportDate}
-        </Text>
-        <Text style={styles.reportNumber}>
-          Report #: {creditReportData.personalInfo.reportNumber}
-        </Text>
+      <View style={gS.labels}>
+        <Text style={gS.minLabel}>200</Text>
+        <Text style={[gS.pctLabel, { color }]}>{pct}% of max</Text>
+        <Text style={gS.maxLabel}>{max}</Text>
       </View>
+    </View>
+  );
+};
+const gS = StyleSheet.create({
+  wrapper:   { width: '100%', marginTop: 8 },
+  barBg:     { height: 12, backgroundColor: '#E5E7EB', borderRadius: 6, overflow: 'hidden' },
+  barFill:   { height: '100%', borderRadius: 6 },
+  labels:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 5 },
+  minLabel:  { fontSize: 11, color: '#9CA3AF' },
+  maxLabel:  { fontSize: 11, color: '#9CA3AF' },
+  pctLabel:  { fontSize: 12, fontWeight: '700' },
+});
 
-      {/* Tab Bar */}
-      {renderTabBar()}
-
-      {/* Content */}
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {renderContent()}
-      </ScrollView>
-
-      {/* Alert Detail Modal */}
-      <Modal
-        visible={showAlertModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowAlertModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.alertModal}>
-            <View style={styles.alertModalHeader}>
-              <MaterialIcons 
-                name={
-                  selectedAlert?.severity === 'warning' ? 'warning' : 
-                  selectedAlert?.type === 'positive' ? 'check-circle' : 'info'
-                } 
-                size={30} 
-                color={
-                  selectedAlert?.severity === 'warning' ? '#F59E0B' :
-                  selectedAlert?.type === 'positive' ? '#10B981' : '#3B82F6'
-                } 
-              />
-              <TouchableOpacity onPress={() => setShowAlertModal(false)}>
-                <MaterialIcons name="close" size={24} color="#6B7280" />
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.alertModalTitle}>{selectedAlert?.title}</Text>
-            <Text style={styles.alertModalMessage}>{selectedAlert?.message}</Text>
-            <Text style={styles.alertModalDate}>Date: {selectedAlert?.date}</Text>
-            
-            <TouchableOpacity 
-              style={styles.alertModalButton}
-              onPress={() => setShowAlertModal(false)}
-            >
-              <Text style={styles.alertModalButtonText}>Got it</Text>
-            </TouchableOpacity>
-          </View>
+// ─── Collapsible Section ───────────────────────────────────────────────────────
+const Section = ({ title, icon, children, defaultOpen = true }) => {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <View style={s.sectionCard}>
+      <TouchableOpacity style={s.sectionHeader} onPress={() => setOpen(v => !v)} activeOpacity={0.7}>
+        <View style={s.sectionHeaderLeft}>
+          {icon && <MaterialIcons name={icon} size={16} color="#8B5CF6" style={{ marginRight: 7 }} />}
+          <Text style={s.sectionTitle}>{title}</Text>
         </View>
-      </Modal>
-    </SafeAreaView>
+        <MaterialIcons name={open ? 'keyboard-arrow-up' : 'keyboard-arrow-down'} size={22} color="#9CA3AF" />
+      </TouchableOpacity>
+      {open && children}
+    </View>
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  reportInfo: {
-    backgroundColor: 'white',
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  reportDate: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  reportNumber: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  tabBar: {
-    flexDirection: 'row',
-    backgroundColor: 'white',
-    paddingHorizontal: 4,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  tabItem: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    borderRadius: 8,
-  },
-  activeTabItem: {
-    backgroundColor: '#F3F0FF',
-  },
-  tabLabel: {
-    fontSize: 10,
-    color: '#6B7280',
-    marginTop: 4,
-    fontWeight: '500',
-  },
-  activeTabLabel: {
-    color: '#8B5CF6',
-    fontWeight: '600',
-  },
-  content: {
-    flex: 1,
-    padding: 16,
-  },
-  section: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 8,
-  },
-  sectionSubtitle: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 16,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  seeAllText: {
-    color: '#8B5CF6',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  
-  // Score Overview Styles
-  scoreOverview: {
-    alignItems: 'center',
-  },
-  currentScoreContainer: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  currentScore: {
-    fontSize: 48,
-    fontWeight: 'bold',
-    color: '#1F2937',
-  },
-  scoreRange: {
-    fontSize: 16,
-    color: '#10B981',
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  scoreTrend: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  scoreChange: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginLeft: 4,
-  },
-  scoreGauge: {
-    width: '100%',
-    alignItems: 'center',
-  },
-  gaugeBackground: {
-    width: '100%',
-    height: 8,
-    backgroundColor: '#E5E7EB',
-    borderRadius: 4,
-    marginBottom: 8,
-  },
-  gaugeFill: {
-    height: '100%',
-    backgroundColor: '#8B5CF6',
-    borderRadius: 4,
-  },
-  gaugeLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
+// ─── Main Screen ──────────────────────────────────────────────────────────────
+const CreditReportScreen = ({ navigation }) => {
+  const [expandedAccount, setExpandedAccount] = useState(null);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const report = CREDIT_REPORT;
 
-  // Factor Card Styles
-  factorCard: {
-    marginBottom: 16,
-    padding: 16,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
-  },
-  factorHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  factorName: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#374151',
-  },
-  factorBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: 'white',
-    borderRadius: 12,
-  },
-  factorStatus: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  factorProgress: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  progressBarBackground: {
-    flex: 1,
-    height: 6,
-    backgroundColor: '#E5E7EB',
-    borderRadius: 3,
-    marginRight: 12,
-  },
-  progressBarFill: {
-    height: '100%',
-    borderRadius: 3,
-  },
-  factorWeight: {
-    fontSize: 12,
-    color: '#6B7280',
-    fontWeight: '500',
-  },
-  factorDescription: {
-    fontSize: 13,
-    color: '#6B7280',
-    lineHeight: 18,
-  },
+  useEffect(() => {
+    Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
+  }, []);
 
-  // Alert Card Styles
-  alertCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    padding: 12,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
-    marginBottom: 12,
-  },
-  alertContent: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  alertTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 4,
-  },
-  alertMessage: {
-    fontSize: 13,
-    color: '#4B5563',
-    marginBottom: 4,
-    lineHeight: 18,
-  },
-  alertDate: {
-    fontSize: 11,
-    color: '#9CA3AF',
-  },
+  const formatCurrency = (val) =>
+    val.toLocaleString('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 0 });
 
-  // Account Card Styles
-  accountCard: {
-    marginBottom: 16,
-    padding: 16,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: '#8B5CF6',
-  },
-  accountHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-  },
-  accountType: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  accountInstitution: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  accountStatusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  accountStatusText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  accountNumber: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginBottom: 12,
-  },
-  accountDetails: {
-    gap: 8,
-  },
-  accountDetailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  accountDetailLabel: {
-    fontSize: 13,
-    color: '#6B7280',
-  },
-  accountDetailValue: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#1F2937',
-  },
+  const getTrendIcon = (trend) =>
+    trend === 'up' ? 'trending-up' : trend === 'down' ? 'trending-down' : 'trending-flat';
 
-  // Chart Styles
-  chartContainer: {
-    flexDirection: 'row',
-    height: 200,
-    marginVertical: 16,
-  },
-  chartYAxis: {
-    width: 40,
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    paddingRight: 8,
-  },
-  yAxisLabel: {
-    fontSize: 10,
-    color: '#9CA3AF',
-  },
-  chartArea: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    paddingHorizontal: 8,
-  },
-  chartColumn: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  chartBar: {
-    width: 20,
-    backgroundColor: '#8B5CF6',
-    borderRadius: 2,
-    minHeight: 10,
-    marginBottom: 8,
-  },
-  chartXLabel: {
-    fontSize: 10,
-    color: '#9CA3AF',
-    marginBottom: 4,
-  },
-  chartScoreLabel: {
-    fontSize: 9,
-    color: '#6B7280',
-    fontWeight: '500',
-  },
+  const getTrendColor = (trend, label) => {
+    if (label === 'Loan Utilization')
+      return trend === 'down' ? '#10B981' : trend === 'up' ? '#EF4444' : '#6B7280';
+    return trend === 'up' ? '#10B981' : trend === 'down' ? '#EF4444' : '#6B7280';
+  };
 
-  // Inquiry Card Styles
-  inquiryCard: {
-    marginBottom: 12,
-    padding: 12,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
-  },
-  inquiryHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  inquiryContent: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  inquiryType: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  inquiryInstitution: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  inquiryDate: {
-    fontSize: 11,
-    color: '#9CA3AF',
-  },
-  inquiryPurpose: {
-    fontSize: 12,
-    color: '#4B5563',
-    marginLeft: 32,
-  },
+  const impactColor = (impact) =>
+    impact === 'High' ? '#EF4444' : impact === 'Medium' ? '#F59E0B' : '#10B981';
 
-  // Recommendation Card Styles
-  recommendationCard: {
-    marginBottom: 16,
-    padding: 16,
-    backgroundColor: '#FFFBEB',
-    borderRadius: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: '#F59E0B',
-  },
-  recommendationHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  recommendationContent: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  recommendationTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 8,
-  },
-  recommendationMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  impactBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  impactText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  timeframe: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  recommendationDescription: {
-    fontSize: 14,
-    color: '#4B5563',
-    lineHeight: 20,
-  },
+  const tier = getCreditTier(report.score);
+  const ptsToNext = getPointsToNextTier(report.score);
 
-  // Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  alertModal: {
-    width: '90%',
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  alertModalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  alertModalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 12,
-  },
-  alertModalMessage: {
-    fontSize: 14,
-    color: '#4B5563',
-    lineHeight: 20,
-    marginBottom: 16,
-  },
-  alertModalDate: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginBottom: 24,
-  },
-  alertModalButton: {
-    backgroundColor: '#8B5CF6',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  alertModalButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  return (
+    <View style={s.container}>
+      <View style={s.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
+          <MaterialIcons name="arrow-back" size={24} color="#1F2937" />
+        </TouchableOpacity>
+        <Text style={s.headerTitle}>Credit Report</Text>
+        <View style={{ width: 40 }} />
+      </View>
+
+      <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
+
+        {/* ── Score Card ── */}
+        <Animated.View style={[s.scoreCard, { opacity: fadeAnim }]}>
+          <View style={s.scoreTop}>
+            <View>
+              <Text style={s.scoreOwner}>{report.owner}</Text>
+              <Text style={s.scoreDate}>Generated: {report.generatedDate}</Text>
+            </View>
+            <View style={[s.ratingBadge, { backgroundColor: tier.color + '18', borderColor: tier.color + '50', borderWidth: 1 }]}>
+              <MaterialIcons name="star" size={13} color={tier.color} />
+              <Text style={[s.ratingText, { color: tier.color }]}>{report.scoreRating}</Text>
+            </View>
+          </View>
+
+          <View style={s.scoreDisplay}>
+            <Text style={[s.scoreNumber, { color: tier.color }]}>{report.score}</Text>
+            <Text style={s.scoreMax}>/ {report.scoreMax}</Text>
+          </View>
+
+          <ScoreGauge score={report.score} max={report.scoreMax} color={tier.color} />
+
+          <View style={s.tierRow}>
+            <View style={[s.tierChip, { backgroundColor: tier.color + '12', borderColor: tier.color + '35', borderWidth: 1 }]}>
+              <Text style={s.tierChipLbl}>Tier</Text>
+              <Text style={[s.tierChipVal, { color: tier.color }]}>{tier.label}</Text>
+            </View>
+            <View style={[s.tierChip, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0', borderWidth: 1 }]}>
+              <Text style={s.tierChipLbl}>Max Loan</Text>
+              <Text style={[s.tierChipVal, { color: '#10B981' }]}>₱{tier.maxLoan.toLocaleString()}</Text>
+            </View>
+            {ptsToNext > 0 && (
+              <View style={[s.tierChip, { backgroundColor: '#FFF7ED', borderColor: '#FED7AA', borderWidth: 1 }]}>
+                <Text style={s.tierChipLbl}>Next Tier</Text>
+                <Text style={[s.tierChipVal, { color: '#F97316' }]}>-{ptsToNext} pts</Text>
+              </View>
+            )}
+          </View>
+
+          <View style={[s.descBox, { backgroundColor: tier.color + '08' }]}>
+            <MaterialIcons name="info-outline" size={14} color={tier.color} />
+            <Text style={s.descTxt}>
+              You're in the <Text style={{ color: tier.color, fontWeight: '700' }}>{tier.label}</Text> tier.
+              Keep repaying loans on time to unlock higher loan limits.
+            </Text>
+          </View>
+        </Animated.View>
+
+        {/* ── Loan Summary ── */}
+        <Section title="Loan Summary" icon="assessment">
+          <View style={s.summaryGrid}>
+            {[
+              { label: 'Total Loans',     value: report.summary.totalLoans,                         icon: 'folder',                 color: '#3B82F6' },
+              { label: 'Active Loans',    value: report.summary.activeLoans,                         icon: 'lock-open',              color: '#10B981' },
+              { label: 'On-Time Rate',    value: `${report.summary.onTimePayments}%`,                icon: 'check-circle',           color: '#10B981' },
+              { label: 'Missed',          value: report.summary.missedPayments,                      icon: 'cancel',                 color: '#EF4444' },
+              { label: 'Total Borrowed',  value: formatCurrency(report.summary.totalBorrowed),       icon: 'account-balance-wallet', color: '#F59E0B' },
+              { label: 'Outstanding',     value: formatCurrency(report.summary.outstandingBalance),  icon: 'donut-large',            color: '#8B5CF6' },
+            ].map((item, idx) => (
+              <View key={idx} style={s.summaryCell}>
+                <View style={[s.summaryCellIcon, { backgroundColor: item.color + '15' }]}>
+                  <MaterialIcons name={item.icon} size={18} color={item.color} />
+                </View>
+                <Text style={s.summaryCellValue}>{item.value}</Text>
+                <Text style={s.summaryCellLabel}>{item.label}</Text>
+              </View>
+            ))}
+          </View>
+        </Section>
+
+        {/* ── Score Factors ── */}
+        <Section title="Score Factors" icon="tune">
+          {report.factors.map((factor, idx) => (
+            <View key={idx} style={[s.factorRow, idx < report.factors.length - 1 && s.factorBorder]}>
+              <View style={s.factorTop}>
+                <View>
+                  <Text style={s.factorLabel}>{factor.label}</Text>
+                  <View style={s.factorImpactRow}>
+                    <View style={[s.impactDot, { backgroundColor: impactColor(factor.impact) }]} />
+                    <Text style={s.factorImpact}>{factor.impact} Impact</Text>
+                  </View>
+                </View>
+                <View style={s.factorRight}>
+                  <Text style={[s.factorValue, { color: factor.color }]}>{factor.value}%</Text>
+                  <MaterialIcons name={getTrendIcon(factor.trend)} size={16} color={getTrendColor(factor.trend, factor.label)} />
+                </View>
+              </View>
+              <View style={s.factorBarBg}>
+                <View style={[s.factorBarFill, { width: `${factor.value}%`, backgroundColor: factor.color }]} />
+              </View>
+            </View>
+          ))}
+        </Section>
+
+        {/* ── Accounts ── */}
+        <Section title="Lora Loan Accounts" icon="account-balance">
+          {report.accounts.map((acc) => {
+            const isExpanded = expandedAccount === acc.id;
+            const isOpen = acc.status === 'Open';
+            return (
+              <TouchableOpacity
+                key={acc.id}
+                style={[
+                  s.accountCard,
+                  !isOpen && s.accountCardClosed,
+                  isOpen && { borderColor: acc.color + '50' },
+                  isExpanded && { borderColor: acc.color, borderWidth: 2 },
+                ]}
+                onPress={() => setExpandedAccount(isExpanded ? null : acc.id)}
+                activeOpacity={0.8}
+              >
+                <View style={s.accountHeader}>
+                  <View style={[s.accountIconBox, { backgroundColor: acc.color + '15' }]}>
+                    <MaterialIcons name={acc.icon} size={22} color={acc.color} />
+                  </View>
+                  <View style={s.accountInfo}>
+                    <Text style={s.accountName}>{acc.name}</Text>
+                    <Text style={s.accountType}>{acc.type}</Text>
+                  </View>
+                  <View style={s.accountRight}>
+                    <View style={[s.statusBadge, { backgroundColor: isOpen ? '#D1FAE5' : '#F3F4F6' }]}>
+                      <View style={[s.statusDot, { backgroundColor: isOpen ? '#10B981' : '#9CA3AF' }]} />
+                      <Text style={[s.statusText, { color: isOpen ? '#065F46' : '#6B7280' }]}>{acc.status}</Text>
+                    </View>
+                    <MaterialIcons name={isExpanded ? 'keyboard-arrow-up' : 'keyboard-arrow-down'} size={20} color="#9CA3AF" />
+                  </View>
+                </View>
+
+                {isExpanded && (
+                  <View style={s.accountDetails}>
+                    {[
+                      ['Payment Status', acc.paymentStatus,
+                        acc.paymentStatus === 'Current' ? '#10B981'
+                        : acc.paymentStatus === 'Fully Paid' ? '#8B5CF6'
+                        : acc.paymentStatus.includes('Late') ? '#EF4444' : '#1F2937'],
+                      ['Opened', acc.openedDate, '#1F2937'],
+                    ].map(([k, v, c]) => (
+                      <View key={k} style={s.detailRow}>
+                        <Text style={s.detailKey}>{k}</Text>
+                        <Text style={[s.detailValue, { color: c }]}>{v}</Text>
+                      </View>
+                    ))}
+                    {isOpen && (
+                      <>
+                        {[
+                          ['Balance', formatCurrency(acc.balance)],
+                          ['Loan Limit', formatCurrency(acc.limit)],
+                        ].map(([k, v]) => (
+                          <View key={k} style={s.detailRow}>
+                            <Text style={s.detailKey}>{k}</Text>
+                            <Text style={s.detailValue}>{v}</Text>
+                          </View>
+                        ))}
+                        <View style={s.detailRow}>
+                          <Text style={s.detailKey}>Utilization</Text>
+                          <Text style={[s.detailValue, { fontWeight: '700',
+                            color: acc.utilization > 50 ? '#EF4444' : acc.utilization > 30 ? '#F59E0B' : '#10B981'
+                          }]}>{acc.utilization}%</Text>
+                        </View>
+                        <View style={s.utilizationBarBg}>
+                          <View style={[s.utilizationBarFill, {
+                            width: `${acc.utilization}%`,
+                            backgroundColor: acc.utilization > 50 ? '#EF4444' : acc.utilization > 30 ? '#F59E0B' : '#10B981',
+                          }]} />
+                        </View>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 3 }}>
+                          <Text style={{ fontSize: 10, color: '#9CA3AF' }}>0% (No debt)</Text>
+                          <Text style={{ fontSize: 10, color: '#9CA3AF' }}>100% (Maxed)</Text>
+                        </View>
+                      </>
+                    )}
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </Section>
+
+        {/* ── Score Journey ── */}
+        <Section title="Score Journey" icon="timeline">
+          {report.scoreHistory.map((entry, idx) => {
+            const entryTier = CREDIT_TIERS.find(t => t.label === entry.tier) || CREDIT_TIERS[0];
+            const isLast = idx === report.scoreHistory.length - 1;
+            return (
+              <View key={idx} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: isLast ? 0 : 14 }}>
+                <View style={{ alignItems: 'center', marginRight: 12 }}>
+                  <View style={{
+                    width: 36, height: 36, borderRadius: 18,
+                    backgroundColor: entryTier.color + '20',
+                    justifyContent: 'center', alignItems: 'center',
+                    borderWidth: 2, borderColor: entryTier.color,
+                  }}>
+                    <Text style={{ fontSize: 9, fontWeight: '800', color: entryTier.color }}>{entry.score}</Text>
+                  </View>
+                  {!isLast && <View style={{ width: 2, height: 22, backgroundColor: '#E5E7EB', marginTop: 3 }} />}
+                </View>
+                <View style={{ flex: 1, paddingTop: 6 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#1F2937' }}>{entry.label}</Text>
+                  <Text style={{ fontSize: 11, color: '#6B7280', marginTop: 1 }}>{entry.note}</Text>
+                  <View style={{ marginTop: 4 }}>
+                    <View style={{ backgroundColor: entryTier.color + '15', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2, alignSelf: 'flex-start' }}>
+                      <Text style={{ fontSize: 10, fontWeight: '700', color: entryTier.color }}>{entryTier.label}</Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            );
+          })}
+        </Section>
+
+        {/* ── Tips ── */}
+        <Section title="💡 Tips to Improve Your Lora Score" defaultOpen={true}>
+          <View style={{ backgroundColor: '#FFFBEB', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#FDE68A' }}>
+            {[
+              { tip: 'Repay loans on time to earn +20 pts per payment',           icon: 'check-circle',           color: '#10B981' },
+              { tip: 'Cash in at least ₱1,000 to earn +5 pts per transaction',    icon: 'account-balance-wallet', color: '#3B82F6' },
+              { tip: 'Complete 5 loan repayments to advance one tier',             icon: 'trending-up',            color: '#8B5CF6' },
+              { tip: 'Verify your email, ID, and mobile for bonus points',         icon: 'verified-user',          color: '#F59E0B' },
+              { tip: 'Keep your profile 100% complete for the best rates',         icon: 'person',                 color: '#F97316' },
+            ].map((item, i) => (
+              <View key={i} style={s.tipRow}>
+                <View style={[s.tipIcon, { backgroundColor: item.color + '15' }]}>
+                  <MaterialIcons name={item.icon} size={14} color={item.color} />
+                </View>
+                <Text style={s.tipText}>{item.tip}</Text>
+              </View>
+            ))}
+          </View>
+        </Section>
+
+      </ScrollView>
+    </View>
+  );
+};
+
+const s = StyleSheet.create({
+  container:    { flex: 1, backgroundColor: '#F8F9FA' },
+  header:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 16, backgroundColor: 'white', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  backBtn:      { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
+  headerTitle:  { fontSize: 18, fontWeight: '600', color: '#1F2937' },
+  content:      { padding: 16, paddingBottom: 40 },
+
+  scoreCard:    { backgroundColor: 'white', borderRadius: 20, padding: 20, marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 3 },
+  scoreTop:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
+  scoreOwner:   { fontSize: 16, fontWeight: '700', color: '#1F2937' },
+  scoreDate:    { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
+  ratingBadge:  { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12 },
+  ratingText:   { fontSize: 13, fontWeight: '700' },
+  scoreDisplay: { flexDirection: 'row', alignItems: 'flex-end', gap: 4 },
+  scoreNumber:  { fontSize: 56, fontWeight: '900', lineHeight: 64 },
+  scoreMax:     { fontSize: 18, color: '#9CA3AF', marginBottom: 10 },
+  tierRow:      { flexDirection: 'row', gap: 8, marginTop: 12 },
+  tierChip:     { flex: 1, borderRadius: 10, padding: 10, alignItems: 'center' },
+  tierChipLbl:  { fontSize: 10, color: '#6B7280', marginBottom: 2 },
+  tierChipVal:  { fontSize: 14, fontWeight: '800' },
+  descBox:      { flexDirection: 'row', alignItems: 'flex-start', gap: 6, borderRadius: 10, padding: 10, marginTop: 12 },
+  descTxt:      { fontSize: 12, color: '#6B7280', lineHeight: 18, flex: 1 },
+
+  sectionCard:       { backgroundColor: 'white', borderRadius: 16, padding: 16, marginBottom: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 1 },
+  sectionHeader:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  sectionHeaderLeft: { flexDirection: 'row', alignItems: 'center' },
+  sectionTitle:      { fontSize: 15, fontWeight: '700', color: '#1F2937' },
+
+  summaryGrid:      { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  summaryCell:      { backgroundColor: '#F9FAFB', borderRadius: 12, padding: 12, alignItems: 'center', width: '30.5%' },
+  summaryCellIcon:  { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
+  summaryCellValue: { fontSize: 14, fontWeight: '800', color: '#1F2937' },
+  summaryCellLabel: { fontSize: 10, color: '#6B7280', textAlign: 'center', marginTop: 2 },
+
+  factorRow:       { paddingVertical: 12 },
+  factorBorder:    { borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  factorTop:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
+  factorLabel:     { fontSize: 14, fontWeight: '600', color: '#1F2937', marginBottom: 3 },
+  factorImpactRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  impactDot:       { width: 6, height: 6, borderRadius: 3 },
+  factorImpact:    { fontSize: 11, color: '#9CA3AF' },
+  factorRight:     { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  factorValue:     { fontSize: 13, fontWeight: '700' },
+  factorBarBg:     { height: 6, backgroundColor: '#E5E7EB', borderRadius: 3, overflow: 'hidden' },
+  factorBarFill:   { height: '100%', borderRadius: 3 },
+
+  accountCard:        { backgroundColor: '#FAFAFA', borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1.5, borderColor: '#E5E7EB' },
+  accountCardClosed:  { opacity: 0.75, borderStyle: 'dashed' },
+  accountHeader:      { flexDirection: 'row', alignItems: 'center' },
+  accountIconBox:     { width: 44, height: 44, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  accountInfo:        { flex: 1, marginLeft: 12 },
+  accountName:        { fontSize: 14, fontWeight: '600', color: '#1F2937' },
+  accountType:        { fontSize: 12, color: '#6B7280' },
+  accountRight:       { alignItems: 'flex-end', gap: 4 },
+  statusBadge:        { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  statusDot:          { width: 6, height: 6, borderRadius: 3 },
+  statusText:         { fontSize: 11, fontWeight: '600' },
+  accountDetails:     { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#F3F4F6' },
+  detailRow:          { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 5 },
+  detailKey:          { fontSize: 13, color: '#6B7280' },
+  detailValue:        { fontSize: 13, fontWeight: '600', color: '#1F2937' },
+  utilizationBarBg:   { height: 6, backgroundColor: '#E5E7EB', borderRadius: 3, overflow: 'hidden', marginTop: 6 },
+  utilizationBarFill: { height: '100%', borderRadius: 3 },
+
+  tipRow:  { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 10 },
+  tipIcon: { width: 28, height: 28, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginTop: 1 },
+  tipText: { fontSize: 13, color: '#78350F', flex: 1, lineHeight: 19 },
 });
 
 export default CreditReportScreen;
